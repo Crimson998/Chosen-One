@@ -1,0 +1,2 @@
+-- Replaces Roblox's default Health script to disable its passive regeneration.
+-- Regeneration is handled by CombatService on the server.
