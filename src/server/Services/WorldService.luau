@@ -860,7 +860,8 @@ local function buildHaven(parent: Instance, zone: ZoneDef)
 
 	-- UNTOUCHABLE: reach the gunslinger without being hit (north-east).
 	do
-		local laneZ, startX, goalX, halfWidth = -78, 41, 95, 6.5
+		-- 36 studs wide: plenty of room to juke sideways out of the lines.
+		local laneZ, startX, goalX, halfWidth = -80, 41, 95, 18
 		local dust = Color3.fromRGB(150, 120, 90)
 		rest(parent, CFrame.new(71, 0, laneZ), V(68, 0.3, halfWidth * 2 + 1), 0, 0, dust, Enum.Material.Ground)
 		for _, side in { -1, 1 } do
@@ -900,36 +901,21 @@ local function buildHaven(parent: Instance, zone: ZoneDef)
 		)
 		rest(parent, CFrame.new(99, 0, laneZ), V(1, 1.2, halfWidth * 2), 0, 0, steel, Enum.Material.DiamondPlate, 0.3)
 
-		local kiosk = rest(
-			parent,
-			CFrame.new(36, 0, laneZ - halfWidth - 5),
-			V(3, 4.5, 3),
-			0,
-			0,
-			Color3.fromRGB(30, 30, 34),
-			Enum.Material.Metal
-		)
-		rest(
-			parent,
-			CFrame.new(36, 0, laneZ - halfWidth - 5),
-			V(3.1, 0.5, 3.1),
-			0,
-			0,
-			Color3.fromRGB(255, 70, 70),
-			Enum.Material.Neon,
-			3.4
-		)
+		-- Entry kiosk just outside the west gate, facing the road.
+		local kioskFrame = CFrame.new(32, 0, laneZ)
+		local kiosk = rest(parent, kioskFrame, V(3, 4.5, 3), 0, 0, Color3.fromRGB(30, 30, 34), Enum.Material.Metal)
+		rest(parent, kioskFrame, V(3.1, 0.5, 3.1), 0, 0, Color3.fromRGB(255, 70, 70), Enum.Material.Neon, 3.4)
 		addPrompt(kiosk, "Play (¢300)", "UNTOUCHABLE", 0.5, function(player)
 			WorldService.UntouchableRequested:Fire(player)
 		end)
 
-		for _, dz in { -8, 8 } do
+		for _, dz in { -11, 11 } do
 			rest(parent, CFrame.new(105, 0, laneZ + dz), V(0.8, 16, 0.8), 0, 0, steel, Enum.Material.Metal)
 		end
 		local signPart = rest(
 			parent,
 			CFrame.new(105, 0, laneZ),
-			V(0.6, 6, 16),
+			V(0.6, 7, 22),
 			0,
 			0,
 			Color3.fromRGB(20, 22, 26),
@@ -939,21 +925,21 @@ local function buildHaven(parent: Instance, zone: ZoneDef)
 		local sign = addSign(signPart, Enum.NormalId.Left, "UNTOUCHABLE", Color3.fromRGB(255, 90, 90))
 		local kioskSign = rest(
 			parent,
-			CFrame.new(36, 0, laneZ - halfWidth - 5),
-			V(3, 1.6, 0.3),
+			kioskFrame,
+			V(0.3, 1.6, 3),
+			-1.6,
 			0,
-			1.6,
 			Color3.fromRGB(20, 22, 26),
 			Enum.Material.SmoothPlastic,
 			4.6
 		)
-		addSign(kioskSign, Enum.NormalId.Back, "UNTOUCHABLE", Color3.fromRGB(255, 90, 90))
+		addSign(kioskSign, Enum.NormalId.Left, "UNTOUCHABLE", Color3.fromRGB(255, 90, 90))
 
 		local startPosition = V(startX, 3.5, laneZ)
 		local gunslingerPosition = V(102, 0.3, laneZ)
 		untouchableLane = {
 			Start = CFrame.lookAt(startPosition, startPosition + V(1, 0, 0)),
-			Exit = CFrame.lookAt(V(33, 3.5, laneZ - halfWidth - 9), V(40, 3.5, laneZ)),
+			Exit = CFrame.lookAt(V(27, 3.5, laneZ + 8), V(37, 3.5, laneZ)),
 			Gunslinger = CFrame.lookAt(gunslingerPosition, gunslingerPosition - V(1, 0, 0)),
 			StartX = startX,
 			GoalX = goalX,
