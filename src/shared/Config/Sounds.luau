@@ -12,6 +12,8 @@ local Sounds: { [string]: string } = {
 	Fire_Shotgun = "",
 	Fire_LMG = "",
 	Fire_Sniper = "",
+	Fire_Optical = "",
+	Fire_Blade = "",
 	Fire_Enemy = "",
 
 	Reload = "",
@@ -25,6 +27,10 @@ local Sounds: { [string]: string } = {
 	BountyComplete = "",
 	Purchase = "",
 	Hurt = "",
+	Deflect = "",
+	BulletLine = "", -- warning when a bullet line locks onto you
+	Heartbeat = "",
+	SpinUp = "",
 }
 
 return Sounds

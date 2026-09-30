@@ -14,7 +14,8 @@ local Weapons = require(script.Parent.Config.Weapons)
 type WeaponDef = Weapons.WeaponDef
 type ModelStyle = Weapons.ModelStyle
 
-type ColorKey = "Body" | "Accent" | "Dark" | "Metal" | "Glow" | "Lens"
+-- AccentGlow is the weapon's accent colour as glowing neon (energy weapons).
+type ColorKey = "Body" | "Accent" | "AccentGlow" | "Dark" | "Metal" | "Glow" | "Lens"
 
 type PartSpec = {
 	Name: string?,
@@ -255,6 +256,137 @@ local Styles: { [ModelStyle]: StyleSpec } = {
 		GripL = V(0, -0.1, -1.1),
 		Hip = CFrame.new(0.65, -0.68, -1.45),
 	},
+
+	-- Bullpup PDW with a translucent top-loaded magazine.
+	PDW = {
+		Parts = concat({
+			block(V(0.28, 0.42, 1.25), V(0, 0, -0.05), "Body", nil, "Receiver"),
+			block(V(0.2, 0.18, 0.5), V(0, -0.3, -0.1), "Body"),
+			block(V(0.17, 0.4, 0.22), V(0, -0.35, -0.05), "Accent", V(-10, 0, 0), "Grip"),
+			block(V(0.2, 0.3, 0.12), V(0, -0.28, -0.55), "Body"),
+			block(V(0.22, 0.08, 1), V(0, 0.25, 0), "Lens", nil, "Mag"),
+			cylZ(0.25, 0.09, V(0, 0.02, -0.78), "Dark"),
+			cylZ(0.1, 0.12, V(0, 0.02, -0.93), "Dark"),
+			block(V(0.26, 0.38, 0.12), V(0, -0.02, 0.6), "Accent"),
+		}, reflexSight(0.29, -0.25)),
+		Muzzle = V(0, 0.02, -1),
+		Aim = V(0, 0.41, 0.2),
+		GripR = V(0, -0.35, -0.03),
+		GripL = V(0, -0.3, -0.45),
+		Hip = CFrame.new(0.55, -0.55, -1.2),
+	},
+
+	-- Heavy bolt-action anti-materiel rifle.
+	AMR = {
+		Parts = {
+			block(V(0.3, 0.36, 1.6), V(0, 0, 0), "Body", nil, "Receiver"),
+			cylZ(2.6, 0.13, V(0, 0.06, -2.1), "Dark", "Barrel"),
+			block(V(0.26, 0.18, 0.4), V(0, 0.06, -3.55), "Dark"),
+			block(V(0.26, 0.28, 0.9), V(0, 0.03, -1.2), "Accent", nil, "Handguard"),
+			block(V(0.26, 0.5, 1.2), V(0, -0.12, 1.35), "Accent", nil, "Stock"),
+			block(V(0.18, 0.12, 0.5), V(0, 0.2, 1.1), "Accent"),
+			block(V(0.18, 0.5, 0.26), V(0, -0.38, 0.5), "Accent", V(-18, 0, 0), "Grip"),
+			block(V(0.2, 0.35, 0.36), V(0, -0.33, -0.15), "Dark", nil, "Mag"),
+			block(V(0.05, 0.8, 0.05), V(-0.14, -0.4, -2), "Dark", V(0, 0, -15)),
+			block(V(0.05, 0.8, 0.05), V(0.14, -0.4, -2), "Dark", V(0, 0, 15)),
+			{ Size = V(0.3, 0.06, 0.06), Pos = V(0.22, 0.1, 0.4), Color = "Metal", Shape = "Cylinder" },
+			ball(0.1, V(0.38, 0.1, 0.4), "Metal"),
+			block(V(0.1, 0.14, 0.1), V(0, 0.25, -0.4), "Dark"),
+			block(V(0.1, 0.14, 0.1), V(0, 0.25, 0.3), "Dark"),
+			cylZ(1.5, 0.22, V(0, 0.42, -0.05), "Dark", "Scope"),
+			cylZ(0.4, 0.34, V(0, 0.42, -0.95), "Dark"),
+			cylZ(0.3, 0.28, V(0, 0.42, 0.8), "Dark"),
+			cylZ(0.02, 0.32, V(0, 0.42, -1.16), "Lens"),
+		},
+		Muzzle = V(0, 0.06, -3.78),
+		Aim = V(0, 0.42, 1.2),
+		GripR = V(0, -0.38, 0.52),
+		GripL = V(0, -0.15, -1.1),
+		Hip = CFrame.new(0.7, -0.72, -1.55),
+	},
+
+	-- Six-barrel rotary gun carried at the hip.
+	Minigun = {
+		Parts = {
+			block(V(0.36, 0.42, 0.9), V(0, 0, 0), "Body", nil, "Housing"),
+			cylZ(1.6, 0.07, V(0.12, 0.02, -1.25), "Dark"),
+			cylZ(1.6, 0.07, V(0.06, 0.124, -1.25), "Dark"),
+			cylZ(1.6, 0.07, V(-0.06, 0.124, -1.25), "Dark"),
+			cylZ(1.6, 0.07, V(-0.12, 0.02, -1.25), "Dark"),
+			cylZ(1.6, 0.07, V(-0.06, -0.084, -1.25), "Dark"),
+			cylZ(1.6, 0.07, V(0.06, -0.084, -1.25), "Dark"),
+			cylZ(0.08, 0.38, V(0, 0.02, -1.6), "Metal"),
+			cylZ(0.08, 0.38, V(0, 0.02, -0.9), "Metal"),
+			block(V(0.2, 0.2, 0.5), V(0, 0.3, 0.1), "Accent", nil, "Motor"),
+			block(V(0.06, 0.06, 0.6), V(0, 0.55, -0.1), "Dark"),
+			block(V(0.06, 0.2, 0.06), V(0, 0.45, 0.15), "Dark"),
+			block(V(0.06, 0.2, 0.06), V(0, 0.45, -0.35), "Dark"),
+			block(V(0.14, 0.4, 0.16), V(0.12, -0.25, 0.42), "Dark", nil, "Grip"),
+			block(V(0.12, 0.35, 0.12), V(-0.25, -0.2, -0.4), "Dark"),
+			block(V(0.4, 0.4, 0.45), V(0.1, -0.45, 0.1), "Accent", nil, "AmmoBox"),
+			block(V(0.1, 0.3, 0.1), V(0.05, -0.2, -0.1), "Dark"),
+		},
+		Muzzle = V(0, 0.02, -2.05),
+		Aim = V(0, 0.5, 0.6),
+		GripR = V(0.12, -0.3, 0.42),
+		GripL = V(-0.25, -0.3, -0.4),
+		Hip = CFrame.new(0.45, -0.75, -1.3),
+	},
+
+	-- Optical (laser) pistol.
+	Blaster = {
+		Parts = {
+			block(V(0.2, 0.26, 0.85), V(0, 0.1, -0.1), "Body", nil, "Body"),
+			cylZ(0.25, 0.14, V(0, 0.1, -0.62), "AccentGlow", "Emitter"),
+			block(V(0.02, 0.08, 0.35), V(0.11, 0.1, 0.05), "AccentGlow"),
+			block(V(0.17, 0.48, 0.26), V(0, -0.28, 0.18), "Dark", V(-15, 0, 0), "Grip"),
+			block(V(0.24, 0.04, 0.3), V(0, 0.25, -0.2), "Body"),
+			block(V(0.03, 0.05, 0.03), V(0, 0.255, -0.5), "Dark"),
+			block(V(0.04, 0.05, 0.04), V(-0.05, 0.255, 0.25), "Dark"),
+			block(V(0.04, 0.05, 0.04), V(0.05, 0.255, 0.25), "Dark"),
+		},
+		Muzzle = V(0, 0.1, -0.76),
+		Aim = V(0, 0.28, 0.45),
+		GripR = V(0, -0.28, 0.2),
+		GripL = V(-0.07, -0.32, 0.16),
+		Hip = CFrame.new(0.55, -0.55, -1.45),
+	},
+
+	-- Optical (laser) assault rifle.
+	OpticalRifle = {
+		Parts = concat({
+			block(V(0.24, 0.34, 1.3), V(0, 0, 0), "Body", nil, "Receiver"),
+			block(V(0.26, 0.3, 1), V(0, 0.02, -1.1), "Body", nil, "Shroud"),
+			cylZ(0.12, 0.22, V(0, 0.03, -1.7), "AccentGlow", "Emitter"),
+			cylZ(0.2, 0.12, V(0, 0.03, -1.85), "Dark"),
+			block(V(0.02, 0.06, 1.6), V(-0.13, 0.05, -0.5), "AccentGlow"),
+			block(V(0.02, 0.06, 1.6), V(0.13, 0.05, -0.5), "AccentGlow"),
+			block(V(0.16, 0.45, 0.3), V(0, -0.36, -0.35), "Dark", nil, "Battery"),
+			block(V(0.17, 0.45, 0.24), V(0, -0.33, 0.35), "Dark", V(-18, 0, 0), "Grip"),
+			block(V(0.2, 0.3, 0.8), V(0, -0.05, 1.05), "Body", nil, "Stock"),
+			block(V(0.12, 0.04, 1.2), V(0, 0.19, -0.3), "Dark"),
+		}, reflexSight(0.21, 0)),
+		Muzzle = V(0, 0.03, -1.96),
+		Aim = V(0, 0.33, 0.45),
+		GripR = V(0, -0.33, 0.37),
+		GripL = V(0, -0.12, -1),
+		Hip = CFrame.new(0.62, -0.62, -1.35),
+	},
+
+	-- Photon sword: a hilt with a glowing blade along -Z.
+	Blade = {
+		Parts = {
+			cylZ(0.5, 0.14, V(0, 0, 0.05), "Body", "Hilt"),
+			cylZ(0.08, 0.2, V(0, 0, -0.22), "Metal"),
+			cylZ(0.06, 0.16, V(0, 0, 0.32), "Metal"),
+			cylZ(2.6, 0.12, V(0, 0, -1.55), "AccentGlow", "Blade"),
+		},
+		Muzzle = V(0, 0, -2.85),
+		Aim = V(0, 0.3, 0.6),
+		GripR = V(0, 0, 0),
+		GripL = V(0, 0, 0.25),
+		Hip = CFrame.new(0.55, -0.6, -1.3) * CFrame.Angles(math.rad(35), math.rad(10), math.rad(-20)),
+	},
 }
 
 local WeaponModel = {}
@@ -270,7 +402,7 @@ local function makePart(spec: PartSpec, palette: { [ColorKey]: Color3 }): Part
 	local rot = spec.Rot or Vector3.zero
 	part.CFrame = CFrame.new(spec.Pos) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
 	part.Color = palette[spec.Color]
-	if spec.Color == "Glow" then
+	if spec.Color == "Glow" or spec.Color == "AccentGlow" then
 		part.Material = Enum.Material.Neon
 	elseif spec.Color == "Lens" then
 		part.Material = Enum.Material.Glass
@@ -312,6 +444,7 @@ function WeaponModel.BuildStyle(style: ModelStyle, body: Color3, accent: Color3,
 	local palette: { [ColorKey]: Color3 } = {
 		Body = body,
 		Accent = accent,
+		AccentGlow = accent,
 		Dark = DARK,
 		Metal = METAL,
 		Glow = GLOW,

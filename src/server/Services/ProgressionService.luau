@@ -5,6 +5,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local DataService = require(script.Parent.DataService)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
@@ -85,6 +86,7 @@ function ProgressionService.AwardXP(player: Player, amount: number, reason: stri
 	while profile.Level < Progression.MaxLevel and profile.XP >= Progression.XPForLevel(profile.Level) do
 		profile.XP -= Progression.XPForLevel(profile.Level)
 		profile.Level += 1
+		profile.AttributePoints += Attributes.PointsPerLevel
 		local bonus = Progression.LevelUpCredits(profile.Level)
 		profile.Credits += bonus
 		ProgressionService.Notify(player, {

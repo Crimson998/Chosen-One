@@ -1,13 +1,19 @@
 --!strict
 -- First-person gunplay: input, client-side prediction (ammo, hit effects),
--- recoil, spread, aim-down-sights, reloads, weapon switching and the
--- viewmodel pose. Every shot is sent to the server, which has the final say.
+-- recoil, the bullet circle, aim-down-sights, reloads, weapon switching,
+-- blade swings and guards, and the viewmodel pose. Every shot is sent to the
+-- server, which has the final say.
+--
+-- The bullet circle is the spread cone: shots land anywhere inside it. It is
+-- shaped by the weapon, movement, DEX, STR (below a weapon's requirement)
+-- and your heart rate, pulsing with every beat.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Audio = require(ReplicatedStorage.Shared.Audio)
 local Ballistics = require(ReplicatedStorage.Shared.Ballistics)
 local Effects = require(script.Parent.Effects)
@@ -30,6 +36,9 @@ local WeaponController = {}
 local BASE_FOV = 70
 local SPRINT_FOV = 76
 local EQUIP_TIME = 0.3
+local SWING_TIME = 0.28
+local SWING_ARC = 56 -- degrees covered by a blade swing's rays
+local AIM_LINE_INTERVAL = 0.12
 local RENDER_NAME = "ChosenOneWeapons"
 
 local player = Players.LocalPlayer
@@ -37,6 +46,8 @@ local player = Players.LocalPlayer
 local fireRemote = Net.Event("WeaponFire")
 local reloadRemote = Net.Event("WeaponReload")
 local equipRemote = Net.Event("WeaponEquip")
+local guardRemote = Net.Event("WeaponGuard")
+local aimLineRemote = Net.Unreliable("AimLine")
 
 local viewmodels: { [Slot]: Viewmodel } = {}
 local equipped: Slot? = nil
@@ -56,6 +67,10 @@ local equipAlpha = 0
 local reloadToken = 0
 local bobTime = 0
 local lastRecoil = Vector3.zero
+local swingStart = -math.huge
+local spin = 0 -- minigun spin-up, 0..1
+local guarding = false
+local lastAimLine = 0
 
 -- Camera recoil (X = pitch, Y = yaw, degrees). Recovers on its own.
 local recoilSpring = Spring.new(120, 14)
@@ -92,10 +107,21 @@ local function ammoFor(slot: Slot): AmmoSlot?
 	return if slot == "Primary" then ammo.Primary else ammo.Secondary
 end
 
+local function stats(): Attributes.AttributeSet
+	local profile = State.Profile
+	return if profile then profile.Attributes else Attributes.Default()
+end
+
+-- Radius of the bullet circle in degrees.
 local function currentSpread(def: WeaponDef): number
+	if def.Melee then
+		return 0
+	end
+	local attributes = stats()
+	local dexterity = Attributes.SpreadMultiplier(attributes.DEX)
 	local base = def.HipSpread + (def.AimSpread - def.HipSpread) * aimAlpha
 	if def.Pellets > 1 then
-		return base -- shotguns keep a fixed pattern
+		return base * dexterity -- shotguns keep a fixed pattern
 	end
 	local speed = 0
 	if rootPart then
@@ -104,7 +130,19 @@ local function currentSpread(def: WeaponDef): number
 	end
 	local movePenalty = math.clamp(speed / 16, 0, 1.5) * 1.2 * (1 - aimAlpha * 0.6)
 	local airPenalty = if humanoid and humanoid.FloorMaterial == Enum.Material.Air then 2.5 else 0
-	return base + bloom * (1 - aimAlpha * 0.5) + movePenalty + airPenalty
+	local _, strengthPenalty = Attributes.HandlingPenalty(attributes.STR, def.RequiredSTR)
+	local spread = base + bloom * (1 - aimAlpha * 0.5) + movePenalty + airPenalty + strengthPenalty
+	-- The circle breathes with each heartbeat and swells as the pulse climbs.
+	local heart = (0.8 + 0.45 * State.Pulse) * (1 + math.max(0, State.HeartRate - 70) / 140)
+	return spread * dexterity * heart
+end
+
+local function setGuarding(value: boolean)
+	if guarding ~= value then
+		guarding = value
+		State.Guarding = value
+		guardRemote:FireServer(value)
+	end
 end
 
 local function cancelReload()
@@ -120,21 +158,22 @@ local function reload()
 	end
 	local def = vm.Def
 	local ammo = ammoFor(slot)
-	if not ammo or ammo.Mag >= def.MagSize or ammo.Reserve <= 0 then
+	if def.Melee or not ammo or ammo.Mag >= def.MagSize or ammo.Reserve <= 0 then
 		return
 	end
 
 	reloadToken += 1
 	local token = reloadToken
+	local reloadTime = def.ReloadTime * Attributes.ReloadMultiplier(stats().DEX)
 	burstRemaining = 0
 	State.Reloading = true
 	State.ReloadStart = os.clock()
-	State.ReloadDuration = def.ReloadTime
+	State.ReloadDuration = reloadTime
 	State.AmmoChanged:Fire()
 	reloadRemote:FireServer()
 	Audio.Play("Reload", 0.5)
 
-	task.delay(def.ReloadTime, function()
+	task.delay(reloadTime, function()
 		if token ~= reloadToken then
 			return
 		end
@@ -155,6 +194,8 @@ local function equip(slot: Slot, fromServer: boolean?)
 		return
 	end
 	cancelReload()
+	setGuarding(false)
+	spin = 0
 	if equipped and viewmodels[equipped] then
 		viewmodels[equipped].Model.Parent = nil
 	end
@@ -191,8 +232,44 @@ local function clearViewmodels()
 	State.WeaponId = nil
 end
 
+-- A blade swing: several short rays fanned across the view.
+local function swing(vm: Viewmodel, now: number)
+	local def = vm.Def
+	lastShot = now
+	swingStart = now
+	local camera = workspace.CurrentCamera
+	local origin = camera.CFrame.Position
+	local shots: { ShotClaim } = {}
+	for index = 1, def.Pellets do
+		local t = if def.Pellets > 1 then (index - 1) / (def.Pellets - 1) else 0.5
+		local yaw = math.rad(SWING_ARC * (t - 0.5))
+		local direction = (camera.CFrame * CFrame.Angles(0, yaw, 0)).LookVector
+		local result = workspace:Raycast(origin, direction * def.Range, rayParams)
+		local claim: ShotClaim = { Dir = direction }
+		if result then
+			claim.Hit = result.Instance
+			claim.Pos = result.Position
+			local model = result.Instance:FindFirstAncestorOfClass("Model")
+			local hitCharacter = model ~= nil and model:FindFirstChildOfClass("Humanoid") ~= nil
+			Effects.Impact(result.Position, result.Normal, hitCharacter)
+		end
+		table.insert(shots, claim)
+	end
+	fireRemote:FireServer({
+		Slot = equipped :: Slot,
+		Origin = origin,
+		Shots = shots,
+	} :: Types.FirePayload)
+	Audio.Play("Fire_" .. def.Sound, 0.6)
+	kickSpring:Impulse(Vector3.new(0, 0, 40))
+end
+
 local function fire(vm: Viewmodel, now: number)
 	local def = vm.Def
+	if def.Melee then
+		swing(vm, now)
+		return
+	end
 	local slot = equipped :: Slot
 	local ammo = ammoFor(slot)
 	if not ammo then
@@ -242,13 +319,15 @@ local function fire(vm: Viewmodel, now: number)
 	} :: Types.FirePayload)
 
 	local muzzle = vm.Muzzle.WorldPosition
+	local tracerColor = Effects.TracerColor(def.Id)
 	for _, endPosition in ends do
-		Effects.Tracer(muzzle, endPosition)
+		Effects.Tracer(muzzle, endPosition, tracerColor)
 	end
 	Viewmodel.MuzzleFlash(vm)
 	Audio.Play("Fire_" .. def.Sound, 0.5)
 
-	local steadiness = 1 - aimAlpha * 0.35
+	local recoilMultiplier = Attributes.HandlingPenalty(stats().STR, def.RequiredSTR)
+	local steadiness = (1 - aimAlpha * 0.35) * recoilMultiplier
 	recoilSpring:Impulse(
 		Vector3.new(def.RecoilKick * 18 * steadiness, rng:NextNumber(-1, 1) * def.RecoilSide * 18 * steadiness, 0)
 	)
@@ -288,7 +367,7 @@ local function updateFiring(vm: Viewmodel, now: number)
 	local def = vm.Def
 	local interval = Weapons.FireInterval(def)
 	if def.FireMode == "Auto" then
-		if triggerHeld and now - lastShot >= interval then
+		if triggerHeld and spin >= 1 and now - lastShot >= interval then
 			fire(vm, now)
 		end
 	elseif def.FireMode == "Burst" then
@@ -340,7 +419,17 @@ local function onRender(dt: number)
 	end
 	State.Firing = triggerHeld or burstRemaining > 0
 
+	-- Miniguns must spin up before they fire.
+	local spinUp = def.SpinUp
+	if spinUp then
+		spin = approach(spin, if triggerHeld and not State.Reloading then 1 else 0, dt / spinUp)
+	else
+		spin = 1
+	end
+	State.SpinUp = spin
+
 	State.AimHeld = aimHeld
+	setGuarding(def.Melee == true and aimHeld and not State.UIOpen)
 	local wantsAim = aimHeld and not State.Reloading and not State.UIOpen
 	aimAlpha = approach(aimAlpha, if wantsAim then 1 else 0, dt / def.AimTime)
 	sprintAlpha = approach(sprintAlpha, if State.Sprinting then 1 else 0, dt / 0.15)
@@ -355,6 +444,16 @@ local function onRender(dt: number)
 		bloom = math.max(0, bloom - dt * math.max(def.MaxBloom, 1) * 2.5)
 	end
 	State.Spread = currentSpread(def)
+
+	-- Let the server know where we're aiming so PvP targets see a bullet line.
+	local zone = State.Zone
+	if not def.Melee and (aimHeld or triggerHeld) and zone and zone.PvP and now - lastAimLine >= AIM_LINE_INTERVAL then
+		lastAimLine = now
+		aimLineRemote:FireServer({
+			Origin = camera.CFrame.Position,
+			Dir = camera.CFrame.LookVector,
+		} :: Types.AimLine)
+	end
 
 	-- Field of view and matching mouse sensitivity.
 	local eased = smoothstep(aimAlpha)
@@ -394,6 +493,13 @@ local function onRender(dt: number)
 		local t = math.clamp((now - State.ReloadStart) / State.ReloadDuration, 0, 1)
 		local w = math.sin(t * math.pi)
 		pose *= CFrame.new(0, -0.25 * w, 0.1 * w) * CFrame.Angles(math.rad(-20 * w), math.rad(10 * w), math.rad(35 * w))
+	end
+
+	local swingProgress = (now - swingStart) / SWING_TIME
+	if swingProgress >= 0 and swingProgress < 1 then
+		-- Sweep the blade across the view, right to left.
+		local w = math.sin(swingProgress * math.pi)
+		pose = CFrame.Angles(math.rad(-35 * w), math.rad(65 * w), math.rad(-25 * w)) * pose
 	end
 
 	local lowered = 1 - smoothstep(equipAlpha)
@@ -473,6 +579,9 @@ local function onCharacterAdded(character: Model)
 		aimHeld = false
 		State.AimHeld = false
 		burstRemaining = 0
+		guarding = false
+		State.Guarding = false
+		spin = 0
 		cancelReload()
 		clearViewmodels()
 		State.Scoped = false
@@ -490,6 +599,10 @@ local function bindInput()
 				return
 			end
 			triggerHeld = true
+			local vm = current()
+			if vm and vm.Def.SpinUp and alive then
+				Audio.Play("SpinUp", 0.5)
+			end
 			onTriggerPressed()
 		elseif inputType == Enum.UserInputType.MouseButton2 or key == Enum.KeyCode.ButtonL2 then
 			if not processed then

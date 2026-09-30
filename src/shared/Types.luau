@@ -1,6 +1,8 @@
 --!strict
 -- Shared data shapes for persisted profiles and network payloads.
 
+local Attributes = require(script.Parent.Config.Attributes)
+
 export type Stats = {
 	Kills: number, -- PvP kills
 	Deaths: number,
@@ -29,6 +31,8 @@ export type Profile = {
 	Level: number,
 	XP: number, -- progress toward the next level
 	Credits: number,
+	Attributes: Attributes.AttributeSet,
+	AttributePoints: number, -- unspent
 	OwnedWeapons: { [string]: boolean },
 	Loadout: Loadout,
 	Stats: Stats,
@@ -66,7 +70,25 @@ export type HitInfo = {
 	Position: Vector3,
 	Damage: number,
 	Headshot: boolean,
+	Critical: boolean,
 	Killed: boolean,
+}
+
+-- Client -> server while aiming or holding the trigger (unreliable, ~8 Hz).
+export type AimLine = {
+	Origin: Vector3,
+	Dir: Vector3,
+}
+
+-- Server -> client: a bullet prediction line. Lines with the same Id replace
+-- each other; a line disappears after Duration seconds unless refreshed.
+export type BulletLine = {
+	Id: string,
+	Shooter: Instance?, -- the line starts at this shooter's muzzle when visible
+	From: Vector3,
+	To: Vector3,
+	Duration: number,
+	TargetsYou: boolean,
 }
 
 -- Server -> other clients: tracer replication.
@@ -86,7 +108,7 @@ export type KillFeedEntry = {
 	VictimIsEnemy: boolean,
 }
 
-export type NotifyKind = "XP" | "Credits" | "LevelUp" | "Bounty" | "Info" | "Warning" | "Boss"
+export type NotifyKind = "XP" | "Credits" | "LevelUp" | "Bounty" | "Info" | "Warning" | "Boss" | "Jackpot"
 
 export type Notification = {
 	Kind: NotifyKind,

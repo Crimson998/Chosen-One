@@ -7,11 +7,16 @@
 --   * each claimed hit must lie on the claimed ray, within weapon range,
 --     near the claimed part (with latency leeway) and with clear line of
 --     sight through world geometry.
+--
+-- It also relays bullet lines: while a player aims at someone in a PvP zone,
+-- the target sees a red prediction line. A shooter who has not fired for a
+-- while stays hidden, so the first shot from an unseen sniper has no line.
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Ballistics = require(ReplicatedStorage.Shared.Ballistics)
 local CombatService = require(script.Parent.CombatService)
 local DataService = require(script.Parent.DataService)
@@ -22,12 +27,14 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local WeaponModel = require(ReplicatedStorage.Shared.WeaponModel)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local WorldService = require(script.Parent.WorldService)
+local Zones = require(ReplicatedStorage.Shared.Config.Zones)
 
 type WeaponDef = Weapons.WeaponDef
 type Slot = Weapons.Slot
 type AmmoState = Types.AmmoState
 type HitInfo = Types.HitInfo
 type ShotReplication = Types.ShotReplication
+type BulletLine = Types.BulletLine
 
 type WeaponState = {
 	Def: WeaponDef,
@@ -53,6 +60,11 @@ type PendingHit = {
 	Position: Vector3,
 }
 
+local function statsOf(player: Player): Attributes.AttributeSet
+	local profile = DataService.GetProfile(player)
+	return if profile then profile.Attributes else Attributes.Default()
+end
+
 local WeaponService = {}
 
 local MAX_ORIGIN_OFFSET = 8 -- studs between claimed origin and the shooter's head
@@ -61,15 +73,22 @@ local LATENCY_LEAD = 0.3 -- seconds of target movement tolerated
 local RELOAD_GRACE = 0.2 -- server finishes reloads early to absorb latency
 local FIRE_RATE_SLACK = 1.1
 local REPLICATION_RADIUS = 1000
+local REVEAL_TIME = 8 -- seconds after firing during which your aim shows a bullet line
+local AIM_LINE_RADIUS = 3.5 -- studs from the aim ray that count as "aimed at"
+local AIM_LINE_DURATION = 0.35
 
 local loadouts: { [Player]: Loadout } = {}
+local lastFired: { [Player]: number } = {}
+local rng = Random.new()
 
 local ammoUpdate = Net.Event("AmmoUpdate")
 local hitConfirm = Net.Event("HitConfirm")
 local shotReplicated = Net.Unreliable("ShotReplicated")
+local bulletLineRemote = Net.Event("BulletLine")
 
 local fireLimiter = RateLimiter.new(40, 20)
 local actionLimiter = RateLimiter.new(15, 10)
+local aimLimiter = RateLimiter.new(12, 12)
 
 local function getSlot(loadout: Loadout, slot: Slot): WeaponState
 	return if slot == "Primary" then loadout.Primary else loadout.Secondary
@@ -282,7 +301,8 @@ local function onFire(player: Player, payload: any)
 	local def = state.Def
 	local now = os.clock()
 
-	if state.ReloadingUntil > 0 then
+	local melee = def.Melee == true
+	if state.ReloadingUntil > 0 and not melee then
 		if now >= state.ReloadingUntil - 0.1 then
 			completeReload(player, state)
 		else
@@ -290,7 +310,7 @@ local function onFire(player: Player, payload: any)
 			return
 		end
 	end
-	if state.Mag <= 0 or not consumeFireToken(state, now) then
+	if (state.Mag <= 0 and not melee) or not consumeFireToken(state, now) then
 		sendAmmo(player)
 		return
 	end
@@ -308,7 +328,10 @@ local function onFire(player: Player, payload: any)
 		return
 	end
 
-	state.Mag -= 1
+	if not melee then
+		state.Mag -= 1
+	end
+	lastFired[player] = now
 
 	-- Shooting ends spawn protection.
 	local forceField = character:FindFirstChildOfClass("ForceField")
@@ -357,7 +380,11 @@ local function onFire(player: Player, payload: any)
 						damage *= def.HeadshotMultiplier
 					end
 					local entry = pending[targetHumanoid]
-					if entry then
+					if entry and melee then
+						-- A swing's rays fan out; count the best one, not all of them.
+						entry.Damage = math.max(entry.Damage, damage)
+						entry.Headshot = entry.Headshot or headshot
+					elseif entry then
 						entry.Damage += damage
 						entry.Headshot = entry.Headshot or headshot
 						entry.Position = hitPosition
@@ -371,17 +398,22 @@ local function onFire(player: Player, payload: any)
 	end
 
 	local hits: { HitInfo } = {}
+	local critChance = Attributes.CritChance(statsOf(player).LUK)
 	for targetHumanoid, entry in pending do
-		local dealt, killed = CombatService.DamageHumanoid(player, targetHumanoid, entry.Damage, {
+		local critical = rng:NextNumber() < critChance
+		local damage = if critical then entry.Damage * Attributes.CritMultiplier else entry.Damage
+		local dealt, killed = CombatService.DamageHumanoid(player, targetHumanoid, damage, {
 			WeaponId = def.Id,
 			Headshot = entry.Headshot,
 			SourcePosition = originVector,
+			DamageType = def.Ammo,
 		})
 		if dealt > 0 then
 			table.insert(hits, {
 				Position = entry.Position,
 				Damage = math.floor(dealt + 0.5),
 				Headshot = entry.Headshot,
+				Critical = critical,
 				Killed = killed,
 			})
 		end
@@ -411,12 +443,13 @@ local function onReload(player: Player)
 	end
 	local state = getSlot(loadout, loadout.Equipped)
 	local def = state.Def
-	if state.ReloadingUntil > 0 or state.Mag >= def.MagSize or state.Reserve <= 0 then
+	if def.Melee or state.ReloadingUntil > 0 or state.Mag >= def.MagSize or state.Reserve <= 0 then
 		return
 	end
 	state.ReloadToken += 1
 	local token = state.ReloadToken
-	local duration = math.max(0.3, def.ReloadTime - RELOAD_GRACE)
+	local reloadTime = def.ReloadTime * Attributes.ReloadMultiplier(statsOf(player).DEX)
+	local duration = math.max(0.3, reloadTime - RELOAD_GRACE)
 	state.ReloadingUntil = os.clock() + duration
 	task.delay(duration, function()
 		if loadouts[player] == loadout and state.ReloadToken == token and state.ReloadingUntil > 0 then
@@ -437,8 +470,84 @@ local function onEquip(player: Player, slot: any)
 		return
 	end
 	cancelReload(getSlot(loadout, loadout.Equipped))
+	loadout.Character:SetAttribute("Guarding", nil)
 	loadout.Equipped = slot
 	attachWorldModel(loadout)
+end
+
+-- Guarding with a blade: CombatService deflects bullets from the front.
+local function onGuard(player: Player, guarding: any)
+	if not actionLimiter:Allow(player) then
+		return
+	end
+	local loadout = loadouts[player]
+	if not loadout then
+		return
+	end
+	local def = getSlot(loadout, loadout.Equipped).Def
+	loadout.Character:SetAttribute("Guarding", if guarding == true and def.Melee then true else nil)
+end
+
+-- While a revealed player aims at someone in a PvP zone, show that target a
+-- bullet line.
+local function onAimLine(player: Player, payload: any)
+	if not aimLimiter:Allow(player) or typeof(payload) ~= "table" then
+		return
+	end
+	local loadout = loadouts[player]
+	local fired = lastFired[player]
+	if not loadout or not fired or os.clock() - fired > REVEAL_TIME then
+		return
+	end
+	local def = getSlot(loadout, loadout.Equipped).Def
+	local character = loadout.Character
+	local head = character:FindFirstChild("Head")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if def.Melee or not head or not head:IsA("BasePart") or not root or not root:IsA("BasePart") then
+		return
+	end
+	local origin, direction = payload.Origin, payload.Dir
+	if not Ballistics.IsFiniteVector(origin) or not Ballistics.IsFiniteVector(direction) then
+		return
+	end
+	local originVector = origin :: Vector3
+	local dir = direction :: Vector3
+	if math.abs(dir.Magnitude - 1) > 0.02 or (originVector - head.Position).Magnitude > MAX_ORIGIN_OFFSET * 2 then
+		return
+	end
+	if not Zones.IsPvPAt(root.Position) then
+		return
+	end
+	dir = dir.Unit
+
+	local params = worldOnlyParams()
+	for _, target in Players:GetPlayers() do
+		if target == player then
+			continue
+		end
+		local targetCharacter = target.Character
+		local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+		if not targetRoot or not targetRoot:IsA("BasePart") or not Zones.IsPvPAt(targetRoot.Position) then
+			continue
+		end
+		local offset = targetRoot.Position - originVector
+		local along = offset:Dot(dir)
+		if along <= 0 or along > def.Range or (offset - dir * along).Magnitude > AIM_LINE_RADIUS then
+			continue
+		end
+		if workspace:Raycast(originVector, offset.Unit * math.max(0, offset.Magnitude - 2), params) then
+			continue -- no line through walls
+		end
+		local line: BulletLine = {
+			Id = `P{player.UserId}`,
+			Shooter = player,
+			From = originVector,
+			To = originVector + dir * math.min(def.Range, along + 25),
+			Duration = AIM_LINE_DURATION,
+			TargetsYou = true,
+		}
+		bulletLineRemote:FireClient(target, line)
+	end
 end
 
 -- Called by PlayerService for every new character. Gives full ammo.
@@ -454,6 +563,8 @@ function WeaponService.SetupCharacter(player: Player, character: Model, keepEqui
 	if previous and previous.WorldModel then
 		previous.WorldModel:Destroy()
 	end
+
+	character:SetAttribute("Guarding", nil)
 
 	local loadout: Loadout = {
 		Character = character,
@@ -557,6 +668,8 @@ function WeaponService.Init()
 	Net.Event("WeaponFire").OnServerEvent:Connect(onFire)
 	Net.Event("WeaponReload").OnServerEvent:Connect(onReload)
 	Net.Event("WeaponEquip").OnServerEvent:Connect(onEquip)
+	Net.Event("WeaponGuard").OnServerEvent:Connect(onGuard)
+	Net.Unreliable("AimLine").OnServerEvent:Connect(onAimLine)
 
 	WorldService.ResupplyRequested:Connect(function(player: Player)
 		WeaponService.RefillAll(player)
@@ -564,6 +677,7 @@ function WeaponService.Init()
 
 	Players.PlayerRemoving:Connect(function(player)
 		loadouts[player] = nil
+		lastFired[player] = nil
 	end)
 end
 

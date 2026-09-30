@@ -1,12 +1,13 @@
 --!strict
--- Sprinting, weapon-dependent move speed and the arms-forward hold pose
--- (so other players see us carrying the gun).
+-- Sprinting, move speed (AGI, weapon handling, carry weight, guarding) and
+-- the arms-forward hold pose (so other players see us carrying the gun).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local State = require(script.Parent.Parent.State)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 
@@ -15,6 +16,8 @@ local MovementController = {}
 local BASE_SPEED = 16
 local SPRINT_MULTIPLIER = 1.45
 local AIM_MULTIPLIER = 0.65
+local GUARD_MULTIPLIER = 0.6
+local OVERWEIGHT_MULTIPLIER = 0.7
 
 -- Roblox's default "tool held" arm poses.
 local HOLD_ANIMATIONS = {
@@ -66,14 +69,31 @@ local function update()
 		and flatLook.Magnitude > 0.01
 		and moveDirection.Unit:Dot(flatLook.Unit) > 0.5
 
-	State.Sprinting = sprintHeld and movingForward and not State.Firing and not State.AimHeld and not State.UIOpen
+	local profile = State.Profile
+	local attributes = if profile then profile.Attributes else Attributes.Default()
+	local carried = if profile then Weapons.LoadoutWeight(profile.Loadout.Primary, profile.Loadout.Secondary) else 0
+	local overweight = carried > Attributes.CarryCapacity(attributes.STR)
+
+	State.Sprinting = sprintHeld
+		and movingForward
+		and not overweight
+		and not State.Firing
+		and not State.AimHeld
+		and not State.UIOpen
 
 	local def = Weapons.Get(State.WeaponId)
-	local speed = BASE_SPEED * (if def then def.MoveSpeedMultiplier else 1)
+	local speed = BASE_SPEED * Attributes.SpeedMultiplier(attributes.AGI) * (if def then def.MoveSpeedMultiplier else 1)
 	if State.Sprinting then
 		speed *= SPRINT_MULTIPLIER
 	end
-	speed *= 1 - State.AimAlpha * (1 - AIM_MULTIPLIER)
+	if overweight then
+		speed *= OVERWEIGHT_MULTIPLIER
+	end
+	if State.Guarding then
+		speed *= GUARD_MULTIPLIER
+	else
+		speed *= 1 - State.AimAlpha * (1 - AIM_MULTIPLIER)
+	end
 	target.WalkSpeed = speed
 end
 

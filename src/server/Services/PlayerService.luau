@@ -5,6 +5,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local CombatService = require(script.Parent.CombatService)
 local DataService = require(script.Parent.DataService)
 local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
@@ -77,8 +78,10 @@ local function onCharacterAdded(player: Player, character: Model)
 	if not humanoid or not humanoid:IsA("Humanoid") then
 		return
 	end
-	humanoid.MaxHealth = Progression.PlayerMaxHealth
-	humanoid.Health = Progression.PlayerMaxHealth
+	local profile = DataService.GetProfile(player)
+	local maxHealth = Attributes.MaxHealth(if profile then profile.Attributes.VIT else Attributes.Base)
+	humanoid.MaxHealth = maxHealth
+	humanoid.Health = maxHealth
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 
 	WeaponService.SetupCharacter(player, character)

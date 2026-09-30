@@ -1,9 +1,13 @@
 --!strict
 -- Spawns and drives every NPC. A single throttled loop runs all enemy AI:
 -- wander near the spawn anchor, acquire visible players (or whoever shot
--- them), chase until in range with line of sight, then strafe and fire.
+-- them), chase until in range with line of sight, then strafe and attack.
 -- Enemies leash back to their anchor if pulled too far and never enter the
 -- safe zone.
+--
+-- Every attack is telegraphed with a bullet line: the enemy locks a line onto
+-- (slightly ahead of) its target, holds it for TelegraphTime, then fires a
+-- burst down that line. Step out of the line and the burst misses.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -23,6 +27,7 @@ type EnemyDef = Enemies.EnemyDef
 type ZoneDef = Zones.ZoneDef
 type Rig = EnemyRig.Rig
 type ShotReplication = Types.ShotReplication
+type BulletLine = Types.BulletLine
 
 type Enemy = {
 	Def: EnemyDef,
@@ -31,7 +36,10 @@ type Enemy = {
 	Anchor: CFrame,
 	FixedAnchor: boolean,
 	Target: Player?,
-	LastShot: number,
+	LineId: string,
+	LineRecipients: { Player },
+	Attacking: boolean,
+	NextAttack: number,
 	NextWander: number,
 	NextStrafe: number,
 	LastPosition: Vector3,
@@ -51,7 +59,10 @@ local CORPSE_TIME = 4
 local enemies: { Enemy } = {}
 local rng = Random.new()
 local shotReplicated = Net.Unreliable("ShotReplicated")
+local bulletLineRemote = Net.Event("BulletLine")
 local shotParams = RaycastParams.new()
+local LINE_WARN_RADIUS = 4 -- players this close to a line are warned too
+local nextLineId = 0
 
 local function flat(vector: Vector3): Vector3
 	return Vector3.new(vector.X, 0, vector.Z)
@@ -159,6 +170,20 @@ local function onEnemyGone(enemy: Enemy, killed: boolean)
 		return
 	end
 	enemy.Alive = false
+	for _, player in enemy.LineRecipients do
+		if player.Parent then
+			bulletLineRemote:FireClient(
+				player,
+				{
+					Id = enemy.LineId,
+					From = Vector3.zero,
+					To = Vector3.zero,
+					Duration = 0,
+					TargetsYou = false,
+				} :: BulletLine
+			)
+		end
+	end
 	local index = table.find(enemies, enemy)
 	if index then
 		table.remove(enemies, index)
@@ -198,6 +223,7 @@ spawnEnemy = function(def: EnemyDef, zone: ZoneDef, anchor: CFrame?)
 		loadAnimations(rig)
 	end
 
+	nextLineId += 1
 	local enemy: Enemy = {
 		Def = def,
 		Rig = rig,
@@ -205,7 +231,10 @@ spawnEnemy = function(def: EnemyDef, zone: ZoneDef, anchor: CFrame?)
 		Anchor = spot,
 		FixedAnchor = fixed,
 		Target = nil,
-		LastShot = 0,
+		LineId = "",
+		LineRecipients = {},
+		Attacking = false,
+		NextAttack = 0,
 		NextWander = 0,
 		NextStrafe = 0,
 		LastPosition = rig.Root.Position,
@@ -213,6 +242,7 @@ spawnEnemy = function(def: EnemyDef, zone: ZoneDef, anchor: CFrame?)
 		Returning = false,
 		Alive = true,
 	}
+	enemy.LineId = `E{nextLineId}`
 	table.insert(enemies, enemy)
 
 	local humanoid = rig.Humanoid
@@ -287,45 +317,124 @@ local function faceTowards(root: BasePart, point: Vector3)
 	end
 end
 
-local function fireAt(enemy: Enemy, character: Model, targetRoot: BasePart)
-	local def = enemy.Def
-	local rig = enemy.Rig
-	local origin = if rig.Muzzle then rig.Muzzle.WorldPosition else rig.Head.Position
-	local head = character:FindFirstChild("Head")
-	local aimPart: BasePart = if head and head:IsA("BasePart") and rng:NextNumber() < 0.15 then head else targetRoot
-	local toTarget = aimPart.Position - origin
-	local distance = toTarget.Magnitude
-	if distance < 0.1 then
-		return
-	end
+local function muzzleOf(rig: Rig): Vector3
+	return if rig.Muzzle then rig.Muzzle.WorldPosition else rig.Head.Position
+end
 
-	-- Accuracy drops with range and against fast-moving targets.
-	local rangeFactor = math.clamp(1 - 0.5 * distance / math.max(def.AttackRange, 1), 0.35, 1)
-	local speedFactor = math.clamp(1 - targetRoot.AssemblyLinearVelocity.Magnitude / 60, 0.6, 1)
-	local hitChance = def.Accuracy * rangeFactor * speedFactor
-	local direction = if rng:NextNumber() < hitChance
-		then toTarget.Unit
-		else Ballistics.ConeDirection(toTarget, rng:NextNumber(2.5, 6), rng)
-
-	local range = def.AttackRange * 1.5
-	local result = workspace:Raycast(origin, direction * range, shotParams)
-	local endPosition = if result then result.Position else origin + direction * range
-	if result then
-		local _, humanoid = CombatService.FindHumanoid(result.Instance)
-		if humanoid then
-			CombatService.DamageHumanoid(rig.Model, humanoid, def.Damage, {
-				WeaponId = def.Id,
-				SourcePosition = origin,
-			})
+-- Raycast params that stop at world geometry only (for trimming lines).
+local function worldParams(): RaycastParams
+	local exclude: { Instance } = { WorldService.GetFolder("Enemies"), WorldService.GetFolder("Drops") }
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(exclude, player.Character)
 		end
 	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = exclude
+	return params
+end
 
+-- Shows the line to its target and to anyone else standing in it.
+local function broadcastLine(enemy: Enemy, target: Player, from: Vector3, to: Vector3, duration: number)
+	local segment = to - from
+	local length = segment.Magnitude
+	if length < 0.1 then
+		return
+	end
+	local recipients: { Player } = {}
+	for _, player in Players:GetPlayers() do
+		local _, root = characterRoot(player)
+		if not root then
+			continue
+		end
+		local isTarget = player == target
+		local offset = root.Position - from
+		local along = math.clamp(offset:Dot(segment.Unit), 0, length)
+		local nearLine = (offset - segment.Unit * along).Magnitude <= LINE_WARN_RADIUS
+		if isTarget or nearLine then
+			table.insert(recipients, player)
+			bulletLineRemote:FireClient(
+				player,
+				{
+					Id = enemy.LineId,
+					Shooter = enemy.Rig.Model,
+					From = from,
+					To = to,
+					Duration = duration,
+					TargetsYou = true,
+				} :: BulletLine
+			)
+		end
+	end
+	enemy.LineRecipients = recipients
+end
+
+local function fireShot(enemy: Enemy, direction: Vector3)
+	local def = enemy.Def
+	local rig = enemy.Rig
+	local origin = muzzleOf(rig)
+	local range = def.AttackRange * 1.6
+	local ends: { Vector3 } = {}
+	for _ = 1, def.Pellets do
+		local dir = Ballistics.ConeDirection(direction, def.Spread, rng)
+		local result = workspace:Raycast(origin, dir * range, shotParams)
+		table.insert(ends, if result then result.Position else origin + dir * range)
+		if result then
+			local _, humanoid = CombatService.FindHumanoid(result.Instance)
+			if humanoid then
+				CombatService.DamageHumanoid(rig.Model, humanoid, def.Damage, {
+					WeaponId = def.Id,
+					SourcePosition = origin,
+				})
+			end
+		end
+	end
 	replicateTracer({
 		Shooter = rig.Model,
 		Weapon = "Enemy",
 		Origin = origin,
-		Ends = { endPosition },
+		Ends = ends,
 	})
+end
+
+-- Locks a bullet line onto the target, waits out the telegraph, then fires
+-- the burst down the locked line.
+local function startAttack(enemy: Enemy, target: Player, targetRoot: BasePart)
+	local def = enemy.Def
+	local rig = enemy.Rig
+	enemy.Attacking = true
+
+	local origin = muzzleOf(rig)
+	local velocity = flat(targetRoot.AssemblyLinearVelocity)
+	local aimPoint = targetRoot.Position + Vector3.new(0, 0.5, 0) + velocity * def.TelegraphTime * def.Lead
+	local toAim = aimPoint - origin
+	if toAim.Magnitude < 0.5 then
+		enemy.Attacking = false
+		return
+	end
+	local direction = toAim.Unit
+	local length = math.min(def.AttackRange * 1.6, toAim.Magnitude + 30)
+	local blocked = workspace:Raycast(origin, direction * length, worldParams())
+	local lineEnd = if blocked then blocked.Position else origin + direction * length
+
+	faceTowards(rig.Root, aimPoint)
+	local duration = def.TelegraphTime + math.max(0, def.Burst - 1) * def.FireInterval + 0.15
+	broadcastLine(enemy, target, origin, lineEnd, duration)
+
+	task.delay(def.TelegraphTime, function()
+		for shot = 1, def.Burst do
+			if not enemy.Alive or rig.Humanoid.Health <= 0 then
+				break
+			end
+			fireShot(enemy, direction)
+			if shot < def.Burst then
+				task.wait(def.FireInterval)
+			end
+		end
+		enemy.Attacking = false
+		enemy.NextAttack = os.clock() + def.AttackCooldown * rng:NextNumber(0.8, 1.2)
+	end)
 end
 
 local function updateEnemy(enemy: Enemy, now: number)
@@ -348,6 +457,13 @@ local function updateEnemy(enemy: Enemy, now: number)
 	local position = rig.Root.Position
 	local anchor = enemy.Anchor.Position
 	local fromAnchor = flat(position - anchor).Magnitude
+
+	if enemy.Attacking then
+		-- Committed to the line: hold position until the burst is done.
+		humanoid.AutoRotate = false
+		humanoid:MoveTo(position)
+		return
+	end
 
 	if fromAnchor > def.LeashRange or Zones.IsSafeAt(position) then
 		enemy.Returning = true
@@ -375,8 +491,8 @@ local function updateEnemy(enemy: Enemy, now: number)
 	if not target then
 		target = acquireTarget(enemy)
 		if target then
-			-- Brief reaction time before the first shot.
-			enemy.LastShot = now - def.FireInterval + 0.5
+			-- Brief reaction time before the first attack.
+			enemy.NextAttack = math.max(enemy.NextAttack, now + 0.4)
 		end
 	end
 	enemy.Target = target
@@ -417,14 +533,9 @@ local function updateEnemy(enemy: Enemy, now: number)
 		end
 		faceTowards(rig.Root, targetRoot.Position)
 
-		if now - enemy.LastShot > def.FireInterval * 3 then
-			enemy.LastShot = now - def.FireInterval
-		end
-		local shots = 0
-		while now - enemy.LastShot >= def.FireInterval and shots < 3 do
-			enemy.LastShot += def.FireInterval
-			shots += 1
-			fireAt(enemy, character, targetRoot)
+		if now >= enemy.NextAttack and def.Burst > 0 then
+			humanoid:MoveTo(position)
+			startAttack(enemy, target, targetRoot)
 		end
 	end
 	updateStuck(enemy)

@@ -24,6 +24,8 @@ export type Viewmodel = {
 local Viewmodel = {}
 
 local AIM_DISTANCE = 0.25 -- studs between the camera and the aim point when aiming
+-- Blades have no sights: "aiming" raises the blade across the body to guard.
+local GUARD_POSE = CFrame.new(0.3, -0.4, -1.5) * CFrame.Angles(math.rad(8), math.rad(80), 0)
 local SLEEVE = Color3.fromRGB(58, 66, 52)
 local GLOVE = Color3.fromRGB(28, 28, 30)
 
@@ -115,7 +117,7 @@ function Viewmodel.Build(def: WeaponDef): Viewmodel
 		Root = root,
 		Muzzle = muzzle,
 		Hip = style.Hip,
-		Ads = CFrame.new(0, 0, -AIM_DISTANCE) * CFrame.new(-style.Aim),
+		Ads = if def.Melee then GUARD_POSE else CFrame.new(0, 0, -AIM_DISTANCE) * CFrame.new(-style.Aim),
 		Parts = parts,
 		Flash = flash,
 		FlashLight = light,

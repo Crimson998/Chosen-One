@@ -4,7 +4,26 @@
 
 export type FireMode = "Auto" | "Semi" | "Burst"
 export type Slot = "Primary" | "Secondary"
-export type ModelStyle = "Pistol" | "MachinePistol" | "Revolver" | "SMG" | "Rifle" | "Shotgun" | "DMR" | "Sniper" | "LMG"
+-- Solid rounds hit players at full strength. Optical (laser) guns are light
+-- and accurate but mostly absorbed by the anti-bullet fields players wear.
+-- Blades are melee energy weapons.
+export type AmmoType = "Solid" | "Optical" | "Blade"
+export type ModelStyle =
+	"Pistol"
+	| "MachinePistol"
+	| "Revolver"
+	| "SMG"
+	| "Rifle"
+	| "Shotgun"
+	| "DMR"
+	| "Sniper"
+	| "LMG"
+	| "PDW"
+	| "AMR"
+	| "Minigun"
+	| "Blaster"
+	| "OpticalRifle"
+	| "Blade"
 
 export type WeaponDef = {
 	Id: string,
@@ -14,6 +33,9 @@ export type WeaponDef = {
 	Slot: Slot,
 	Price: number,
 	LevelRequired: number,
+	Ammo: AmmoType,
+	Weight: number, -- kg; see Attributes.CarryCapacity
+	RequiredSTR: number, -- below this, recoil and spread suffer
 
 	Damage: number, -- per pellet
 	HeadshotMultiplier: number,
@@ -43,6 +65,8 @@ export type WeaponDef = {
 	AimTime: number, -- seconds to fully aim down sights
 	Scoped: boolean?,
 	MoveSpeedMultiplier: number,
+	Melee: boolean?, -- short-range swing: Pellets rays fanned horizontally, no ammo
+	SpinUp: number?, -- seconds the trigger must be held before it fires (miniguns)
 
 	Model: {
 		Style: ModelStyle,
@@ -64,6 +88,9 @@ local defs: { WeaponDef } = {
 		Slot = "Secondary",
 		Price = 0,
 		LevelRequired = 1,
+		Ammo = "Solid",
+		Weight = 1.0,
+		RequiredSTR = 0,
 		Damage = 25,
 		HeadshotMultiplier = 1.8,
 		FalloffStart = 60,
@@ -96,6 +123,9 @@ local defs: { WeaponDef } = {
 		Slot = "Secondary",
 		Price = 1800,
 		LevelRequired = 6,
+		Ammo = "Solid",
+		Weight = 1.6,
+		RequiredSTR = 5,
 		Damage = 17,
 		HeadshotMultiplier = 1.5,
 		FalloffStart = 30,
@@ -128,6 +158,9 @@ local defs: { WeaponDef } = {
 		Slot = "Secondary",
 		Price = 4500,
 		LevelRequired = 16,
+		Ammo = "Solid",
+		Weight = 2.0,
+		RequiredSTR = 14,
 		Damage = 58,
 		HeadshotMultiplier = 2,
 		FalloffStart = 80,
@@ -153,7 +186,79 @@ local defs: { WeaponDef } = {
 		Sound = "Revolver",
 	},
 
-	-- Primaries ---------------------------------------------------------------
+	{
+		Id = "Lumen",
+		DisplayName = "Lumen Blaster",
+		Class = "Optical Pistol",
+		Description = "Featherweight laser sidearm. No falloff, huge battery. Shreds monsters, but anti-bullet fields blunt it against players.",
+		Slot = "Secondary",
+		Price = 1500,
+		LevelRequired = 3,
+		Ammo = "Optical",
+		Weight = 0.7,
+		RequiredSTR = 0,
+		Damage = 22,
+		HeadshotMultiplier = 1.6,
+		FalloffStart = 500,
+		FalloffEnd = 600,
+		MinDamageRatio = 1,
+		Range = 500,
+		FireMode = "Semi",
+		RPM = 460,
+		Pellets = 1,
+		MagSize = 24,
+		ReserveAmmo = 144,
+		ReloadTime = 1.3,
+		HipSpread = 1.2,
+		AimSpread = 0.25,
+		SpreadPerShot = 0.4,
+		MaxBloom = 2,
+		RecoilKick = 0.7,
+		RecoilSide = 0.2,
+		AimFOV = 60,
+		AimTime = 0.14,
+		MoveSpeedMultiplier = 1,
+		Model = { Style = "Blaster", Body = Color3.fromRGB(225, 228, 234), Accent = Color3.fromRGB(0, 210, 255) },
+		Sound = "Optical",
+	},
+	{
+		Id = "PhotonBlade",
+		DisplayName = "Photon Blade",
+		Class = "Energy Sword",
+		Description = "A beam saber for the reckless. Hold aim to guard: bullets from the front are cut out of the air.",
+		Slot = "Secondary",
+		Price = 8000,
+		LevelRequired = 12,
+		Ammo = "Blade",
+		Weight = 0.5,
+		RequiredSTR = 0,
+		Damage = 65,
+		HeadshotMultiplier = 1.3,
+		FalloffStart = 20,
+		FalloffEnd = 30,
+		MinDamageRatio = 1,
+		Range = 10,
+		FireMode = "Semi",
+		RPM = 110,
+		Pellets = 5,
+		MagSize = 1,
+		ReserveAmmo = 0,
+		ReloadTime = 0.5,
+		HipSpread = 0,
+		AimSpread = 0,
+		SpreadPerShot = 0,
+		MaxBloom = 0,
+		RecoilKick = 0.8,
+		RecoilSide = 0,
+		AimFOV = 70,
+		AimTime = 0.1,
+		MoveSpeedMultiplier = 1.08,
+		Melee = true,
+		Model = { Style = "Blade", Body = Color3.fromRGB(30, 30, 34), Accent = Color3.fromRGB(170, 110, 255) },
+		Sound = "Blade",
+	},
+
+	-- Primaries -------------------------------------------------------------
 	{
 		Id = "Viper",
 		DisplayName = "Viper SMG",
@@ -162,6 +267,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 0,
 		LevelRequired = 1,
+		Ammo = "Solid",
+		Weight = 2.8,
+		RequiredSTR = 0,
 		Damage = 19,
 		HeadshotMultiplier = 1.5,
 		FalloffStart = 40,
@@ -194,6 +302,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 2500,
 		LevelRequired = 4,
+		Ammo = "Solid",
+		Weight = 3.6,
+		RequiredSTR = 8,
 		Damage = 26,
 		HeadshotMultiplier = 1.6,
 		FalloffStart = 90,
@@ -226,6 +337,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 3200,
 		LevelRequired = 8,
+		Ammo = "Solid",
+		Weight = 3.4,
+		RequiredSTR = 12,
 		Damage = 13,
 		HeadshotMultiplier = 1.25,
 		FalloffStart = 15,
@@ -258,6 +372,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 4200,
 		LevelRequired = 11,
+		Ammo = "Solid",
+		Weight = 3.8,
+		RequiredSTR = 10,
 		Damage = 30,
 		HeadshotMultiplier = 1.6,
 		FalloffStart = 110,
@@ -292,6 +409,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 6000,
 		LevelRequired = 14,
+		Ammo = "Solid",
+		Weight = 5.0,
+		RequiredSTR = 16,
 		Damage = 46,
 		HeadshotMultiplier = 2,
 		FalloffStart = 150,
@@ -325,6 +445,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 9000,
 		LevelRequired = 22,
+		Ammo = "Solid",
+		Weight = 9.5,
+		RequiredSTR = 26,
 		Damage = 29,
 		HeadshotMultiplier = 1.5,
 		FalloffStart = 100,
@@ -357,6 +480,9 @@ local defs: { WeaponDef } = {
 		Slot = "Primary",
 		Price = 12000,
 		LevelRequired = 30,
+		Ammo = "Solid",
+		Weight = 7.5,
+		RequiredSTR = 22,
 		Damage = 120,
 		HeadshotMultiplier = 2.5,
 		FalloffStart = 300,
@@ -370,7 +496,7 @@ local defs: { WeaponDef } = {
 		ReserveAmmo = 30,
 		ReloadTime = 3.4,
 		HipSpread = 6,
-		AimSpread = 0,
+		AimSpread = 0.12,
 		SpreadPerShot = 0,
 		MaxBloom = 0,
 		RecoilKick = 7,
@@ -380,6 +506,148 @@ local defs: { WeaponDef } = {
 		Scoped = true,
 		MoveSpeedMultiplier = 0.88,
 		Model = { Style = "Sniper", Body = Color3.fromRGB(44, 48, 40), Accent = Color3.fromRGB(24, 24, 24) },
+		Sound = "Sniper",
+	},
+	{
+		Id = "Vixen",
+		DisplayName = "Vixen PDW",
+		Class = "Personal Defense Weapon",
+		Description = "Compact bullpup with a 50-round top magazine. Built for fast, small operatives who never stop moving.",
+		Slot = "Primary",
+		Price = 3500,
+		LevelRequired = 7,
+		Ammo = "Solid",
+		Weight = 2.6,
+		RequiredSTR = 0,
+		Damage = 17,
+		HeadshotMultiplier = 1.6,
+		FalloffStart = 50,
+		FalloffEnd = 150,
+		MinDamageRatio = 0.55,
+		Range = 450,
+		FireMode = "Auto",
+		RPM = 900,
+		Pellets = 1,
+		MagSize = 50,
+		ReserveAmmo = 250,
+		ReloadTime = 2.4,
+		HipSpread = 1.8,
+		AimSpread = 0.7,
+		SpreadPerShot = 0.18,
+		MaxBloom = 2.8,
+		RecoilKick = 0.7,
+		RecoilSide = 0.45,
+		AimFOV = 60,
+		AimTime = 0.15,
+		MoveSpeedMultiplier = 1.05,
+		Model = { Style = "PDW", Body = Color3.fromRGB(255, 130, 170), Accent = Color3.fromRGB(40, 36, 42) },
+		Sound = "SMG",
+	},
+	{
+		Id = "Arclight",
+		DisplayName = "Arclight",
+		Class = "Optical Rifle",
+		Description = "Laser assault rifle. Pinpoint, no falloff, 60-shot battery. The monster hunter's favourite; weak against anti-bullet fields.",
+		Slot = "Primary",
+		Price = 5000,
+		LevelRequired = 9,
+		Ammo = "Optical",
+		Weight = 3,
+		RequiredSTR = 0,
+		Damage = 25,
+		HeadshotMultiplier = 1.5,
+		FalloffStart = 800,
+		FalloffEnd = 900,
+		MinDamageRatio = 1,
+		Range = 900,
+		FireMode = "Auto",
+		RPM = 620,
+		Pellets = 1,
+		MagSize = 60,
+		ReserveAmmo = 240,
+		ReloadTime = 2,
+		HipSpread = 2,
+		AimSpread = 0.3,
+		SpreadPerShot = 0.15,
+		MaxBloom = 2,
+		RecoilKick = 0.6,
+		RecoilSide = 0.25,
+		AimFOV = 50,
+		AimTime = 0.2,
+		MoveSpeedMultiplier = 0.98,
+		Model = { Style = "OpticalRifle", Body = Color3.fromRGB(230, 232, 238), Accent = Color3.fromRGB(0, 200, 255) },
+		Sound = "Optical",
+	},
+	{
+		Id = "Thunderclap",
+		DisplayName = "Thunderclap",
+		Class = "Minigun",
+		Description = "Six barrels, 1800 rounds a minute. Spins up before it fires and needs a lot of STR to carry.",
+		Slot = "Primary",
+		Price = 18000,
+		LevelRequired = 28,
+		Ammo = "Solid",
+		Weight = 22,
+		RequiredSTR = 40,
+		Damage = 13,
+		HeadshotMultiplier = 1.3,
+		FalloffStart = 60,
+		FalloffEnd = 200,
+		MinDamageRatio = 0.6,
+		Range = 600,
+		FireMode = "Auto",
+		RPM = 1800,
+		Pellets = 1,
+		MagSize = 300,
+		ReserveAmmo = 600,
+		ReloadTime = 6.5,
+		HipSpread = 3.5,
+		AimSpread = 2.4,
+		SpreadPerShot = 0.05,
+		MaxBloom = 2.5,
+		RecoilKick = 0.45,
+		RecoilSide = 0.5,
+		AimFOV = 62,
+		AimTime = 0.4,
+		MoveSpeedMultiplier = 0.72,
+		SpinUp = 0.7,
+		Model = { Style = "Minigun", Body = Color3.fromRGB(60, 62, 66), Accent = Color3.fromRGB(28, 28, 30) },
+		Sound = "LMG",
+	},
+	{
+		Id = "Nemesis",
+		DisplayName = "Nemesis .50",
+		Class = "Anti-Materiel Rifle",
+		Description = "A .50 calibre goddess of vengeance. Seven rounds that end fights from beyond the horizon. Demands STR.",
+		Slot = "Primary",
+		Price = 22000,
+		LevelRequired = 36,
+		Ammo = "Solid",
+		Weight = 14,
+		RequiredSTR = 30,
+		Damage = 170,
+		HeadshotMultiplier = 2.5,
+		FalloffStart = 400,
+		FalloffEnd = 1500,
+		MinDamageRatio = 0.9,
+		Range = 2500,
+		FireMode = "Semi",
+		RPM = 35,
+		Pellets = 1,
+		MagSize = 7,
+		ReserveAmmo = 28,
+		ReloadTime = 4,
+		HipSpread = 7,
+		AimSpread = 0.12,
+		SpreadPerShot = 0,
+		MaxBloom = 0,
+		RecoilKick = 10,
+		RecoilSide = 1.2,
+		AimFOV = 12,
+		AimTime = 0.45,
+		Scoped = true,
+		MoveSpeedMultiplier = 0.82,
+		Model = { Style = "AMR", Body = Color3.fromRGB(58, 62, 52), Accent = Color3.fromRGB(26, 26, 28) },
 		Sound = "Sniper",
 	},
 }
@@ -406,6 +674,18 @@ end
 -- Seconds between two shots (within a burst for burst weapons).
 function Weapons.FireInterval(def: WeaponDef): number
 	return 60 / def.RPM
+end
+
+-- Total carried weight of a loadout in kg.
+function Weapons.LoadoutWeight(primaryId: string?, secondaryId: string?): number
+	local total = 0
+	for _, id in { primaryId, secondaryId } do
+		local def = Weapons.Get(id)
+		if def then
+			total += def.Weight
+		end
+	end
+	return total
 end
 
 return Weapons

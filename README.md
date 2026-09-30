@@ -1,12 +1,54 @@
 # Chosen One
 
-A first-person shooter MMO for Roblox. Players spawn in **Haven**, a safe hub
-city, then fight NPCs and each other across a chain of harder zones. Levels,
-credits, weapons and bounties persist between sessions.
+A first-person shooter MMO for Roblox in the spirit of *Gun Gale Online*.
+Players spawn in **Haven**, a safe hub city under an orange sky, then fight
+NPCs and each other across a chain of harder wasteland zones. They dodge
+bullet lines, time shots to their heartbeat and build a character from
+STR/AGI/VIT/DEX/LUK. Levels, stats, credits, weapons and bounties persist
+between sessions.
 
 Everything is built from code. The map, guns, first-person viewmodels, enemies
 and UI are generated at runtime from primitive parts, so the game runs from an
 empty Baseplate with no uploaded assets.
+
+## Gun Gale Online-style systems
+
+- **Bullet lines.** Before an enemy fires, a red prediction line shows where
+  the shot will go. It thickens as the shot approaches; step out of it and the
+  burst misses. Enemies lead moving targets, so change direction to dodge. In
+  PvP zones, players aiming at you project a line too. The exception: a
+  shooter who hasn't fired for a while is hidden, so **the first shot from an
+  unseen sniper has no line**.
+- **Bullet circle.** The crosshair is a circle, and shots land anywhere inside
+  it. It pulses with your **heart rate**: sprinting, firing, taking hits or
+  having a line locked onto you raise your pulse and swell the circle, while
+  standing still calms it. Fire between heartbeats for the tightest shot.
+- **Stats.** Earn 3 points per level and spend them in the STATUS window (C):
+  | Stat | Effect |
+  |---|---|
+  | STR | Carry capacity. Heavy guns need STR, or they kick hard and spray wide |
+  | AGI | Movement and sprint speed |
+  | VIT | Max HP |
+  | DEX | Smaller bullet circle, faster reloads |
+  | LUK | Critical hits (x1.5) and bonus credits |
+  Carrying more than your STR allows slows you down and stops you sprinting.
+  Stats can be reset in Haven for credits.
+- **Optical vs solid guns.** Optical (laser) guns are light, accurate and
+  have no falloff, and they hit monsters harder. But every player wears an
+  **anti-bullet field** that absorbs 75% of optical damage, so solid rounds
+  rule PvP.
+- **Photon Blade.** A beam sword for your sidearm slot. Hold aim to guard: it
+  deflects bullets coming from the front.
+- **GGO-style arsenal.** Includes the pink *Vixen* PDW with a 50-round top
+  magazine, the *Thunderclap* minigun (spins up, needs STR 40), and the
+  *Nemesis .50* anti-materiel rifle.
+- **UNTOUCHABLE.** A dodge game in Haven. Pay ¢300 and run the lane to the
+  gunslinger while he fires telegraphed shots that speed up and fan out as you
+  close in. Reach him untouched to win the jackpot, which grows with every
+  failed attempt.
+
+Places and weapons use original names, so the game can be published without
+borrowing the franchise's trademarks. Rename anything in `src/shared/Config`.
 
 ## Features
 
@@ -14,9 +56,10 @@ empty Baseplate with no uploaded assets.
   and the server decides. It validates shot origin, fire rate (a token bucket
   that tolerates network jitter), ammo, reload timing, range, line of sight
   and each claimed hit position, with extra leeway for fast-moving targets.
-- **10 weapons, 2 loadout slots.** Pistol, machine pistol, revolver, SMG,
-  assault rifle, burst rifle, shotgun, DMR, LMG and sniper. Weapons have
-  damage falloff, headshot multipliers, spread and bloom, recoil,
+- **16 weapons, 2 loadout slots.** Pistols, a revolver, an optical blaster, a
+  photon blade, SMG, PDW, assault and optical rifles, a burst rifle, shotgun,
+  DMR, LMG, minigun, sniper and anti-materiel rifle. Weapons have damage
+  falloff, headshot multipliers, bloom, recoil, weight, STR requirements,
   aim-down-sights with zoom and matched sensitivity, and scope overlays.
 - **First-person feel.** Procedural viewmodels with arms, sway, bob, kick,
   sprint pose, reload and equip animations, muzzle flash, tracers, impacts,
@@ -24,13 +67,14 @@ empty Baseplate with no uploaded assets.
 - **Persistent world.** One hub and three combat zones:
   | Zone | Rules | Level | Enemies |
   |---|---|---|---|
-  | Haven | Safe | – | Training dummies, Armory, transit pads, global leaderboard |
-  | The Outskirts | PvE | 1+ | Scavengers, Raiders |
+  | Haven | Safe | – | Training dummies, Armory, UNTOUCHABLE, transit pads, leaderboard |
+  | The Dust Flats | PvE | 1+ | Scavengers, Raiders |
   | The Wastes | **PvP** | 10+ | Raiders, Marauders, Sharpshooters |
-  | The Core | **PvP** | 25+ | Enforcers, Sharpshooters, **The Juggernaut** (world boss) |
+  | The Ruined Core | **PvP** | 25+ | Enforcers, Sharpshooters, **The Juggernaut** (world boss) |
 - **NPC AI.** Enemies wander, spot you with line of sight, fight back when
-  shot, chase, strafe, fire with range-based accuracy, and leash back home if
-  pulled too far. They never enter the safe zone.
+  shot, chase and strafe. Every attack is telegraphed with a bullet line
+  before the burst. They leash back home if pulled too far and never enter
+  the safe zone.
 - **MMO progression.** 60 levels, credits, and shared kill credit: anyone who
   deals at least 10% of an enemy's health gets full XP. Enemies far below your
   level give reduced XP. Three rotating bounties per player, PvP rewards, a
@@ -92,11 +136,12 @@ to API Services**.
 | WASD | Move |
 | Shift | Sprint |
 | Left mouse | Fire |
-| Right mouse | Aim down sights |
+| Right mouse | Aim down sights (with the Photon Blade: guard) |
 | R | Reload |
 | 1 / 2, Q, mouse wheel | Switch weapon |
 | E | Interact (Armory, resupply, transit, return beacon) |
 | B | Armory (inside Haven) |
+| C | STATUS: spend stat points |
 | Tab | Scoreboard |
 | H | Toggle controls help |
 
@@ -107,7 +152,7 @@ A gamepad works too: R2 fire, L2 aim, X reload, Y swap, L3 sprint.
 ```
 default.project.json          Rojo project (maps src/ into the DataModel)
 src/shared/   → ReplicatedStorage.Shared
-  Config/                     All tuning: Weapons, Enemies, Zones, Progression, Bounties, Sounds
+  Config/                     All tuning: Weapons, Enemies, Zones, Attributes, Progression, Bounties, Sounds
   Net.luau                    Every RemoteEvent/RemoteFunction, declared in one place
   Types.luau                  Profile and network payload types
   Ballistics.luau             Damage falloff and spread (shared by client and server)
@@ -119,10 +164,14 @@ src/server/   → ServerScriptService.Server
     WorldService              Generates the map, hub props and lighting
     DataService               Session-locked DataStore profiles
     ProgressionService        XP, levels, credits, stats, leaderstats, profile replication
+    AttributeService          Spending and resetting STR/AGI/VIT/DEX/LUK points
     BountyService             Rotating objectives
-    CombatService             All damage: zone rules, kill credit, rewards, regeneration
-    WeaponService             Server-side ammo, fire-rate and hit validation, ammo drops
-    EnemyService              NPC spawning and AI
+    CombatService             All damage: zone rules, anti-bullet fields, blade deflection,
+                              kill credit, rewards, regeneration
+    WeaponService             Server-side ammo, fire-rate and hit validation, crits, melee,
+                              player bullet-line relay, ammo drops
+    EnemyService              NPC spawning and AI with telegraphed (bullet line) attacks
+    UntouchableService        The dodge-the-gunslinger jackpot game
     ShopService               Armory purchases and loadouts
     LeaderboardService        Cross-server leaderboard (OrderedDataStore)
     PlayerService             Spawning, nametags, death and respawn, transit
@@ -130,7 +179,8 @@ src/server/   → ServerScriptService.Server
 src/client/   → StarterPlayerScripts.Client
   Main.client.luau            Boots controllers
   State.luau                  Shared client state and signals
-  Controllers/                Weapon, Viewmodel, Effects, HUD, Movement, Shop, Scoreboard
+  Controllers/                Weapon, Viewmodel, Effects, HUD, Movement, Shop, Status,
+                              Scoreboard, HeartRate, BulletLine
 src/character/Health.server.luau  Stubs out default regen (CombatService handles it)
 ```
 
@@ -176,6 +226,9 @@ definitions.
 
 ## Ideas for next steps
 
+- A *Bullet of Bullets*-style battle royale event: a queue in Haven, a
+  separate arena, satellite scans that reveal positions, and a champion title
+- Squad Jam-style team battles
 - Parties and squads with shared XP, party chat and markers
 - Mobile touch controls (fire and aim buttons)
 - Cosmetics: weapon skins, charms and titles bought with credits

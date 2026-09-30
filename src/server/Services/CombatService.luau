@@ -6,7 +6,9 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local BountyService = require(script.Parent.BountyService)
+local DataService = require(script.Parent.DataService)
 local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
@@ -25,7 +27,14 @@ export type DamageInfo = {
 	WeaponId: string?,
 	Headshot: boolean?,
 	SourcePosition: Vector3?,
+	DamageType: string?, -- Weapons.AmmoType; nil = solid
 }
+
+-- Players wear anti-bullet fields that absorb most optical (laser) damage.
+-- Monsters have none, which makes optical guns the hunter's choice.
+local ANTI_BULLET_FIELD = 0.25
+local OPTICAL_VS_MONSTERS = 1.15
+local DEFLECT_ARC = math.cos(math.rad(55)) -- blade guard covers +/-55 degrees
 
 export type AttackRecord = {
 	Attacker: Attacker,
@@ -157,7 +166,9 @@ local function rewardEnemyKill(humanoid: Humanoid, def: EnemyDef, killer: Player
 	for _, player in credited do
 		local xp = Progression.EnemyXP(def.XP, def.Level, ProgressionService.GetLevel(player))
 		ProgressionService.AwardXP(player, xp, def.DisplayName)
-		ProgressionService.AwardCredits(player, def.Credits)
+		local profile = DataService.GetProfile(player)
+		local luck = if profile then profile.Attributes.LUK else Attributes.Base
+		ProgressionService.AwardCredits(player, math.floor(def.Credits * Attributes.LootMultiplier(luck)))
 		ProgressionService.AddStat(player, "EnemyKills", 1)
 		if def.Boss then
 			ProgressionService.AddStat(player, "BossKills", 1)
@@ -252,6 +263,24 @@ local function handleKill(humanoid: Humanoid, attacker: Attacker, info: DamageIn
 	CombatService.Killed:Fire(humanoid, attacker, info)
 end
 
+-- A player guarding with a blade cuts incoming bullets out of the air when
+-- they come from in front.
+local function isDeflected(victimModel: Instance, info: DamageInfo): boolean
+	if victimModel:GetAttribute("Guarding") ~= true or info.DamageType == "Blade" or not info.SourcePosition then
+		return false
+	end
+	local root = victimModel:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
+		return false
+	end
+	local toSource = (info.SourcePosition - root.Position) * Vector3.new(1, 0, 1)
+	local facing = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	if toSource.Magnitude < 0.1 or facing.Magnitude < 0.1 then
+		return false
+	end
+	return facing.Unit:Dot(toSource.Unit) >= DEFLECT_ARC
+end
+
 -- Applies damage if the rules allow it. Returns (damageDealt, killed).
 function CombatService.DamageHumanoid(
 	attacker: Attacker,
@@ -261,6 +290,20 @@ function CombatService.DamageHumanoid(
 ): (number, boolean)
 	if amount <= 0 or not CombatService.CanDamage(attacker, humanoid) then
 		return 0, false
+	end
+
+	local victimModel = humanoid.Parent
+	local victimPlayer = if victimModel then Players:GetPlayerFromCharacter(victimModel) else nil
+	if victimPlayer and victimModel then
+		if isDeflected(victimModel, info) then
+			damageTaken:FireClient(victimPlayer, info.SourcePosition, 0)
+			return 0, false
+		end
+		if info.DamageType == "Optical" then
+			amount *= ANTI_BULLET_FIELD
+		end
+	elseif info.DamageType == "Optical" then
+		amount *= OPTICAL_VS_MONSTERS
 	end
 
 	local dealt = math.min(humanoid.Health, amount)
@@ -278,8 +321,6 @@ function CombatService.DamageHumanoid(
 		byPlayer[attackerPlayer] = (byPlayer[attackerPlayer] or 0) + dealt
 	end
 
-	local victimModel = humanoid.Parent
-	local victimPlayer = if victimModel then Players:GetPlayerFromCharacter(victimModel) else nil
 	if victimPlayer then
 		damageTaken:FireClient(victimPlayer, info.SourcePosition, dealt)
 	end
@@ -304,8 +345,8 @@ function CombatService.Init()
 				if humanoid and humanoid.Health > 0 and humanoid.Health < humanoid.MaxHealth then
 					local last = humanoid:GetAttribute("LastDamaged")
 					if typeof(last) ~= "number" or now - last >= Progression.RegenDelay then
-						humanoid.Health =
-							math.min(humanoid.MaxHealth, humanoid.Health + Progression.RegenPerSecond * REGEN_TICK)
+						local regen = humanoid.MaxHealth * Progression.RegenFraction * REGEN_TICK
+						humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + regen)
 					end
 				end
 			end

@@ -25,7 +25,10 @@ local controllers: { Controller } = {
 	require(Controllers.WeaponController) :: any,
 	require(Controllers.MovementController) :: any,
 	require(Controllers.ShopController) :: any,
+	require(Controllers.StatusController) :: any,
 	require(Controllers.ScoreboardController) :: any,
+	require(Controllers.HeartRateController) :: any,
+	require(Controllers.BulletLineController) :: any,
 }
 
 -- Hide the core UI this game replaces. SetCoreGuiEnabled can fail while the

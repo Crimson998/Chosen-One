@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Audio = require(ReplicatedStorage.Shared.Audio)
 local Bounties = require(ReplicatedStorage.Shared.Config.Bounties)
 local Create = require(script.Parent.Parent.UI.Create)
@@ -38,18 +39,21 @@ local KILLFEED_MAX = 6
 local KILLFEED_LIFETIME = 7
 local BOSS_BAR_RANGE = 260
 local HELP_TEXT =
-	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim  •  R Reload  •  1/2/Q/Wheel Switch  •  E Interact  •  B Armory (Haven)  •  Tab Scoreboard  •  H Help"
+	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim / Guard  •  R Reload  •  1/2/Q/Wheel Switch  •  E Interact  •  B Armory  •  C Stats  •  Tab Scoreboard  •  H Help"
+local CIRCLE_COLOR = Color3.fromRGB(80, 255, 140)
 
 local gui: ScreenGui
 local humanoid: Humanoid? = nil
 
 -- Element references (assigned in build()).
 local crosshair: Frame
-local crossBars: { Frame } = {}
+local circleStroke: UIStroke
 local hitmarker: Frame
 local hitBars: { Frame } = {}
 local healthFill: Frame
 local healthText: TextLabel
+local bpmLabel: TextLabel
+local pointsLabel: TextLabel
 local levelLabel: TextLabel
 local xpFill: Frame
 local xpText: TextLabel
@@ -129,38 +133,39 @@ local function bar(parent: Instance, position: UDim2, size: UDim2, color: Color3
 	return back, fill
 end
 
-local function line(parent: Instance, size: UDim2, anchor: Vector2, color: Color3?): Frame
-	return Create("Frame", {
-		Size = size,
-		AnchorPoint = anchor,
-		BackgroundColor3 = color or Color3.new(1, 1, 1),
-		BorderSizePixel = 0,
-		Parent = parent,
-	}, {
-		Create("UIStroke", { Color = Color3.new(0, 0, 0), Transparency = 0.5, Thickness = 1 }),
-	})
-end
-
 ---------------------------------------------------------------------------
 -- Build
 ---------------------------------------------------------------------------
 
+-- The bullet circle: shots land anywhere inside it. WeaponController sizes it
+-- from the weapon, movement, stats and heart rate.
 local function buildCrosshair()
 	crosshair = Create("Frame", {
-		Name = "Crosshair",
+		Name = "BulletCircle",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(0, 0),
+		Size = UDim2.fromOffset(40, 40),
 		BackgroundTransparency = 1,
+		ZIndex = 8,
 		Parent = gui,
+	}, {
+		Create("UICorner", { CornerRadius = UDim.new(0.5, 0) }),
 	})
-	crossBars = {
-		line(crosshair, UDim2.fromOffset(2, 9), Vector2.new(0.5, 1)), -- top
-		line(crosshair, UDim2.fromOffset(2, 9), Vector2.new(0.5, 0)), -- bottom
-		line(crosshair, UDim2.fromOffset(9, 2), Vector2.new(1, 0.5)), -- left
-		line(crosshair, UDim2.fromOffset(9, 2), Vector2.new(0, 0.5)), -- right
-	}
-	line(crosshair, UDim2.fromOffset(2, 2), Vector2.new(0.5, 0.5))
+	circleStroke = Create("UIStroke", {
+		Color = CIRCLE_COLOR,
+		Thickness = 1.5,
+		Transparency = 0.3,
+		Parent = crosshair,
+	})
+	Create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(3, 3),
+		BackgroundColor3 = CIRCLE_COLOR,
+		BorderSizePixel = 0,
+		ZIndex = 8,
+		Parent = crosshair,
+	}, { Create("UICorner", { CornerRadius = UDim.new(0.5, 0) }) })
 
 	hitmarker = Create("Frame", {
 		Name = "Hitmarker",
@@ -186,28 +191,66 @@ local function buildCrosshair()
 end
 
 local function buildVitals()
+	local status: Frame = Create("Frame", {
+		Name = "Status",
+		Position = UDim2.fromOffset(16, 60),
+		Size = UDim2.fromOffset(300, 48),
+		BackgroundColor3 = Theme.Panel,
+		BackgroundTransparency = 0.45,
+		Parent = gui,
+	}, { corner(6) })
+	text({
+		Position = UDim2.fromOffset(10, 4),
+		Size = UDim2.fromOffset(200, 18),
+		Font = Theme.FontHeavy,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = player.DisplayName,
+		Parent = status,
+	})
+	bpmLabel = text({
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 4),
+		Size = UDim2.fromOffset(90, 18),
+		TextSize = 14,
+		TextColor3 = Theme.Bad,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Text = "♥ 70",
+		Parent = status,
+	})
+	local _, fill = bar(status, UDim2.fromOffset(10, 26), UDim2.fromOffset(280, 14), Theme.Good)
+	healthFill = fill
+	healthText = text({
+		Position = UDim2.fromOffset(16, 25),
+		Size = UDim2.fromOffset(200, 16),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextSize = 12,
+		TextStrokeTransparency = 0.4,
+		Text = "HP 100",
+		Parent = status,
+	})
+
 	local panel: Frame = Create("Frame", {
-		Name = "Vitals",
+		Name = "Progress",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 20, 1, -20),
-		Size = UDim2.fromOffset(320, 92),
+		Size = UDim2.fromOffset(320, 66),
 		BackgroundTransparency = 1,
 		Parent = gui,
 	})
-	local _, fill = bar(panel, UDim2.fromOffset(0, 0), UDim2.fromOffset(320, 18), Theme.Good)
-	healthFill = fill
-	healthText = text({
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.fromOffset(200, 18),
-		TextXAlignment = Enum.TextXAlignment.Left,
+	pointsLabel = text({
+		Position = UDim2.fromOffset(0, -22),
+		Size = UDim2.fromOffset(320, 18),
 		TextSize = 14,
-		TextStrokeTransparency = 0.4,
-		Text = "100",
+		TextColor3 = Theme.XP,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = "",
+		Visible = false,
 		Parent = panel,
 	})
 
 	levelLabel = text({
-		Position = UDim2.fromOffset(0, 26),
+		Position = UDim2.fromOffset(0, 0),
 		Size = UDim2.fromOffset(70, 26),
 		Font = Theme.FontHeavy,
 		TextSize = 22,
@@ -216,10 +259,10 @@ local function buildVitals()
 		Text = "LV 1",
 		Parent = panel,
 	})
-	local _, xp = bar(panel, UDim2.fromOffset(72, 36), UDim2.fromOffset(248, 8), Theme.XP)
+	local _, xp = bar(panel, UDim2.fromOffset(72, 10), UDim2.fromOffset(248, 8), Theme.XP)
 	xpFill = xp
 	xpText = text({
-		Position = UDim2.fromOffset(72, 46),
+		Position = UDim2.fromOffset(72, 20),
 		Size = UDim2.fromOffset(248, 16),
 		TextSize = 13,
 		TextColor3 = Theme.Muted,
@@ -228,7 +271,7 @@ local function buildVitals()
 		Parent = panel,
 	})
 	creditsLabel = text({
-		Position = UDim2.fromOffset(0, 66),
+		Position = UDim2.fromOffset(0, 40),
 		Size = UDim2.fromOffset(320, 24),
 		TextSize = 20,
 		TextColor3 = Theme.Credits,
@@ -632,6 +675,9 @@ local function refreshProfile()
 		xpText.Text = `{Format.Commas(profile.XP)} / {Format.Commas(needed)} XP`
 	end
 	creditsLabel.Text = `¢ {Format.Commas(profile.Credits)}`
+	pointsLabel.Visible = profile.AttributePoints > 0
+	pointsLabel.Text =
+		`▲ {profile.AttributePoints} stat point{if profile.AttributePoints == 1 then "" else "s"} to spend (press C)`
 
 	for _, child in bountyList:GetChildren() do
 		if child:IsA("Frame") then
@@ -684,17 +730,35 @@ local function refreshAmmo()
 	local equippedSlot = if ammo.Equipped == "Secondary" then ammo.Secondary else ammo.Primary
 	local def = Weapons.Get(equippedSlot.Id)
 	weaponLabel.Text = if def then string.upper(def.DisplayName) else ""
-	magLabel.Text = tostring(equippedSlot.Mag)
-	reserveLabel.Text = `/ {equippedSlot.Reserve}`
-	magLabel.TextColor3 = if def and equippedSlot.Mag <= math.ceil(def.MagSize * 0.25) then Theme.Bad else Theme.Text
+	local melee = def ~= nil and def.Melee == true
+	magLabel.Text = if melee then "∞" else tostring(equippedSlot.Mag)
+	reserveLabel.Text = if melee then "" else `/ {equippedSlot.Reserve}`
+	magLabel.TextColor3 = if def
+			and not melee
+			and equippedSlot.Mag <= math.ceil(def.MagSize * 0.25)
+		then Theme.Bad
+		else Theme.Text
 
 	if def then
-		local mode = if def.FireMode == "Burst" then `BURST x{def.BurstCount or 3}` else string.upper(def.FireMode)
-		local hint = if equippedSlot.Mag == 0 and equippedSlot.Reserve > 0
-			then "   •   [R] RELOAD"
+		local mode = if melee
+			then "MELEE  •  [RMB] GUARD"
+			elseif def.FireMode == "Burst" then `BURST x{def.BurstCount or 3}`
+			else string.upper(def.FireMode)
+		local hint = if melee
+			then ""
+			elseif equippedSlot.Mag == 0 and equippedSlot.Reserve > 0 then "   •   [R] RELOAD"
 			elseif equippedSlot.Mag == 0 then "   •   NO AMMO"
 			else ""
-		modeLabel.Text = `{def.Class}  •  {mode}{hint}`
+		local ammoType = if def.Ammo == "Optical"
+			then "  •  OPTICAL"
+			elseif def.Ammo == "Solid" then "  •  SOLID"
+			else ""
+		local profile = State.Profile
+		local overweight = profile ~= nil
+			and Weapons.LoadoutWeight(profile.Loadout.Primary, profile.Loadout.Secondary)
+				> Attributes.CarryCapacity(profile.Attributes.STR)
+		modeLabel.Text = `{if overweight then "OVERWEIGHT  •  " else ""}{def.Class}  •  {mode}{ammoType}{hint}`
+		modeLabel.TextColor3 = if overweight then Theme.Warn else Theme.Muted
 	end
 
 	for index, slot in { "Primary", "Secondary" } do
@@ -852,7 +916,7 @@ local function showHitmarker(hits: { HitInfo })
 	for _, hit in hits do
 		killed = killed or hit.Killed
 		headshot = headshot or hit.Headshot
-		Effects.DamageNumber(hit.Position, hit.Damage, hit.Headshot, hit.Killed)
+		Effects.DamageNumber(hit.Position, hit.Damage, hit.Headshot, hit.Killed, hit.Critical)
 	end
 	local color = if killed then Theme.Bad elseif headshot then Theme.Headshot else Color3.new(1, 1, 1)
 	local size = if killed then 14 else 10
@@ -921,13 +985,16 @@ local function onNotify(notification: Notification)
 	elseif kind == "Credits" then
 		addReward(`+¢{Format.Commas(amount)}`, Theme.Credits)
 	elseif kind == "LevelUp" then
-		showBanner(notification.Text, `Level up!  +¢{Format.Commas(amount)}`, Theme.XP)
+		showBanner(notification.Text, `Level up!  +¢{Format.Commas(amount)}  •  new stat points (press C)`, Theme.XP)
 		Audio.Play("LevelUp", 0.8)
 	elseif kind == "Bounty" then
 		showBanner("BOUNTY COMPLETE", notification.Text, Theme.XP)
 		Audio.Play("BountyComplete", 0.8)
 	elseif kind == "Boss" then
 		showBanner("WORLD BOSS", notification.Text, Theme.Bad)
+	elseif kind == "Jackpot" then
+		showBanner("UNTOUCHABLE!", notification.Text, Theme.XP)
+		Audio.Play("BountyComplete", 0.9)
 	elseif kind == "Warning" then
 		showToast(notification.Text, Theme.Warn)
 	else
@@ -1037,20 +1104,18 @@ local function renderUpdate()
 	local camera = workspace.CurrentCamera
 	local viewport = camera.ViewportSize
 
-	-- Crosshair gap follows the real spread cone.
+	-- The bullet circle is drawn at the true size of the spread cone.
 	local fov = math.rad(camera.FieldOfView)
-	local gap = math.tan(math.rad(State.Spread)) / math.tan(fov / 2) * (viewport.Y / 2)
-	gap = math.clamp(gap, 3, 160)
-	crossBars[1].Position = UDim2.fromOffset(0, -gap)
-	crossBars[2].Position = UDim2.fromOffset(0, gap)
-	crossBars[3].Position = UDim2.fromOffset(-gap, 0)
-	crossBars[4].Position = UDim2.fromOffset(gap, 0)
+	local radius = math.tan(math.rad(State.Spread)) / math.tan(fov / 2) * (viewport.Y / 2)
+	radius = math.clamp(radius, 4, 260)
+	crosshair.Size = UDim2.fromOffset(radius * 2, radius * 2)
+	circleStroke.Transparency = if State.Firing or State.AimHeld then 0.05 else 0.4
+	local weapon = Weapons.Get(State.WeaponId)
 	local alive = humanoid ~= nil and humanoid.Health > 0
-	crosshair.Visible = alive
-		and State.WeaponId ~= nil
-		and not State.Sprinting
-		and State.AimAlpha < 0.5
-		and not State.UIOpen
+	crosshair.Visible = alive and weapon ~= nil and not weapon.Melee and not State.Sprinting and not State.UIOpen
+
+	bpmLabel.Text = `♥ {math.floor(State.HeartRate + 0.5)}`
+	bpmLabel.TextTransparency = 0.45 - 0.45 * State.Pulse
 
 	scopeOverlay.Visible = State.Scoped
 
@@ -1059,7 +1124,7 @@ local function renderUpdate()
 		local ratio = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
 		healthFill.Size = UDim2.fromScale(ratio, 1)
 		healthFill.BackgroundColor3 = Theme.Bad:Lerp(Theme.Good, ratio)
-		healthText.Text = tostring(math.ceil(humanoid.Health))
+		healthText.Text = `HP {math.ceil(humanoid.Health)} / {math.floor(humanoid.MaxHealth)}`
 		vignette.Visible = ratio < 0.5 and ratio > 0
 		vignette.BackgroundTransparency = 1
 		for _, edge in vignette:GetChildren() do
@@ -1069,10 +1134,15 @@ local function renderUpdate()
 		end
 	end
 
-	-- Reload progress.
+	-- Reload progress, or minigun spin-up.
 	if State.Reloading and State.ReloadDuration > 0 then
 		reloadBack.Visible = true
+		reloadFill.BackgroundColor3 = Theme.Accent
 		reloadFill.Size = UDim2.fromScale(math.clamp((os.clock() - State.ReloadStart) / State.ReloadDuration, 0, 1), 1)
+	elseif weapon and weapon.SpinUp and State.SpinUp > 0 then
+		reloadBack.Visible = true
+		reloadFill.BackgroundColor3 = if State.SpinUp >= 1 then Theme.Bad else Theme.Warn
+		reloadFill.Size = UDim2.fromScale(State.SpinUp, 1)
 	else
 		reloadBack.Visible = false
 	end
@@ -1117,7 +1187,12 @@ function HUD.Init()
 	Net.Event("KillFeed").OnClientEvent:Connect(addKillFeed)
 	Net.Event("Notify").OnClientEvent:Connect(onNotify)
 	Net.Event("Died").OnClientEvent:Connect(onDied)
-	Net.Event("DamageTaken").OnClientEvent:Connect(function(source: Vector3?, _amount: number)
+	Net.Event("DamageTaken").OnClientEvent:Connect(function(source: Vector3?, amount: number)
+		if amount == 0 then
+			addReward("DEFLECTED", Color3.fromRGB(170, 140, 255))
+			Audio.Play("Deflect", 0.6)
+			return
+		end
 		showDamageDirection(source)
 		Audio.Play("Hurt", 0.5)
 	end)

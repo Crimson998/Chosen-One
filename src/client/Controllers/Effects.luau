@@ -19,6 +19,7 @@ local MAX_HOLES = 80
 local TRACER_SPEED = 1400 -- studs per second
 local PLAYER_TRACER = Color3.fromRGB(255, 225, 160)
 local ENEMY_TRACER = Color3.fromRGB(255, 110, 80)
+local OPTICAL_TRACER = Color3.fromRGB(90, 230, 255)
 
 local folder = Instance.new("Folder")
 folder.Name = "ClientEffects"
@@ -44,6 +45,12 @@ end
 
 function Effects.Folder(): Folder
 	return folder
+end
+
+-- Tracer colour for a weapon: optical guns fire cyan laser bolts.
+function Effects.TracerColor(weaponId: string?): Color3
+	local def = Weapons.Get(weaponId)
+	return if def and def.Ammo == "Optical" then OPTICAL_TRACER else PLAYER_TRACER
 end
 
 -- A short streak that travels from `from` to `to`.
@@ -134,7 +141,7 @@ function Effects.Flash(position: Vector3, color: Color3?)
 	Debris:AddItem(part, 0.05)
 end
 
-function Effects.DamageNumber(position: Vector3, amount: number, headshot: boolean, killed: boolean)
+function Effects.DamageNumber(position: Vector3, amount: number, headshot: boolean, killed: boolean, critical: boolean?)
 	local attachment = Instance.new("Attachment")
 	attachment.WorldPosition = position
 	attachment.Parent = workspace.Terrain
@@ -151,9 +158,10 @@ function Effects.DamageNumber(position: Vector3, amount: number, headshot: boole
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBlack
 	label.TextScaled = true
-	label.Text = tostring(amount)
+	label.Text = if critical then `{amount}!` else tostring(amount)
 	label.TextColor3 = if killed
 		then Color3.fromRGB(255, 70, 70)
+		elseif critical then Color3.fromRGB(255, 140, 40)
 		elseif headshot then Color3.fromRGB(255, 200, 40)
 		else Color3.fromRGB(255, 255, 255)
 	label.TextStrokeTransparency = 0.3
@@ -198,16 +206,19 @@ function Effects.RemoteShot(payload: ShotReplication)
 		return
 	end
 	local isEnemy = payload.Weapon == "Enemy"
+	local def = Weapons.Get(payload.Weapon)
 	local from = findMuzzle(payload.Shooter) or payload.Origin
+	Audio.PlayAt(if def then "Fire_" .. def.Sound else "Fire_Enemy", from, 0.7)
+	if def and def.Melee then
+		return -- blade swings have no tracer or flash
+	end
+	local color = if isEnemy then ENEMY_TRACER else Effects.TracerColor(payload.Weapon)
 	for _, endPosition in payload.Ends do
 		if typeof(endPosition) == "Vector3" then
-			Effects.Tracer(from, endPosition, if isEnemy then ENEMY_TRACER else PLAYER_TRACER)
+			Effects.Tracer(from, endPosition, color)
 		end
 	end
-	Effects.Flash(from)
-
-	local def = Weapons.Get(payload.Weapon)
-	Audio.PlayAt(if def then "Fire_" .. def.Sound else "Fire_Enemy", from, 0.7)
+	Effects.Flash(from, if def and def.Ammo == "Optical" then OPTICAL_TRACER else nil)
 end
 
 return Effects

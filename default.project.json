@@ -15,7 +15,8 @@
     "StarterPlayer": {
       "$properties": {
         "CameraMode": "LockFirstPerson",
-        "CharacterWalkSpeed": 16
+        "CharacterWalkSpeed": 16,
+        "EnableMouseLockOption": false
       },
       "StarterPlayerScripts": {
         "Client": {
@@ -42,7 +43,7 @@
     "Lighting": {
       "$properties": {
         "Technology": "Future",
-        "ClockTime": 15.5,
+        "ClockTime": 17.3,
         "Brightness": 2.5,
         "GlobalShadows": true
       }

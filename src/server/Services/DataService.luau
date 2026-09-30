@@ -16,6 +16,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
 local Signal = require(ReplicatedStorage.Shared.Signal)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -96,6 +97,8 @@ function DataService.NewProfile(): Profile
 		Level = 1,
 		XP = 0,
 		Credits = Progression.StartingCredits,
+		Attributes = Attributes.Default(),
+		AttributePoints = 0,
 		OwnedWeapons = owned,
 		Loadout = {
 			Primary = Weapons.DefaultLoadout.Primary,
@@ -155,6 +158,25 @@ local function reconcile(saved: any): Profile
 	end
 	if not validSlot(profile.Loadout.Secondary, "Secondary") then
 		profile.Loadout.Secondary = Weapons.DefaultLoadout.Secondary
+	end
+
+	-- Stat points: clamp each stat, then make spent + unspent add up to what
+	-- this level has earned (covers older profiles and tuning changes).
+	local spent = 0
+	for _, info in Attributes.List do
+		local raw = Attributes.Get(profile.Attributes, info.Id)
+		local value = if typeof(raw) == "number" and raw == raw
+			then math.clamp(math.floor(raw), Attributes.Base, Attributes.Max)
+			else Attributes.Base
+		Attributes.Set(profile.Attributes, info.Id, value)
+		spent += value - Attributes.Base
+	end
+	local earned = Attributes.TotalPoints(profile.Level)
+	if spent > earned then
+		profile.Attributes = Attributes.Default()
+		profile.AttributePoints = earned
+	else
+		profile.AttributePoints = earned - spent
 	end
 	return profile
 end

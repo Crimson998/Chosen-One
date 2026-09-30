@@ -5,10 +5,9 @@ local Progression = {}
 
 Progression.MaxLevel = 60
 Progression.StartingCredits = 500
-Progression.PlayerMaxHealth = 100
 Progression.RespawnTime = 4
 Progression.RegenDelay = 5 -- seconds without damage before health regenerates
-Progression.RegenPerSecond = 12
+Progression.RegenFraction = 0.12 -- share of max health regenerated per second
 Progression.SpawnProtection = 3 -- seconds of ForceField after spawning
 
 -- XP needed to go from `level` to `level + 1`.

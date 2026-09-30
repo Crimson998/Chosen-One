@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Audio = require(ReplicatedStorage.Shared.Audio)
 local Create = require(script.Parent.Parent.UI.Create)
 local Format = require(ReplicatedStorage.Shared.Format)
@@ -223,10 +224,19 @@ local function refreshDetail()
 	local status = statusOf(def)
 	nameLabel.Text = def.DisplayName
 	classLabel.Text = `{def.Class}  •  {def.Slot}  •  {def.FireMode}`
-	descriptionLabel.Text = def.Description
-	local damageText = if def.Pellets > 1 then `{def.Damage}x{def.Pellets}` else tostring(def.Damage)
+	local profile = State.Profile
+	local strength = if profile then profile.Attributes.STR else Attributes.Base
+	local strengthNote = if strength < def.RequiredSTR
+		then `\nYour STR ({strength}) is below {def.RequiredSTR}: expect heavy recoil and a wide bullet circle.`
+		else ""
+	descriptionLabel.Text = def.Description .. strengthNote
+	local damageText = if def.Melee
+		then `{def.Damage} melee`
+		elseif def.Pellets > 1 then `{def.Damage}x{def.Pellets}`
+		else tostring(def.Damage)
+	local magazineText = if def.Melee then "" else `   •   MAG {def.MagSize}`
 	numbersLabel.Text =
-		`DMG {damageText}   •   {def.RPM} RPM   •   MAG {def.MagSize}   •   RELOAD {def.ReloadTime}s   •   HS x{def.HeadshotMultiplier}`
+		`{string.upper(def.Ammo)}   •   DMG {damageText}   •   {def.RPM} RPM{magazineText}   •   {def.Weight} kg   •   STR {def.RequiredSTR}`
 
 	for _, spec in STATS do
 		local fill = statFills[spec.Name]
@@ -247,7 +257,6 @@ local function refreshDetail()
 		actionButton.BackgroundColor3 = if status.Affordable then Theme.Good else Theme.PanelLight
 	end
 
-	local profile = State.Profile
 	if profile then
 		header.Text = `LV {profile.Level}   •   ¢ {Format.Commas(profile.Credits)}`
 	end
@@ -396,15 +405,16 @@ local function build()
 		Parent = detail,
 	})
 	descriptionLabel = text({
-		Position = UDim2.fromOffset(18, 74),
-		Size = UDim2.fromOffset(388, 40),
+		Position = UDim2.fromOffset(18, 72),
+		Size = UDim2.fromOffset(388, 42),
 		Font = Theme.FontBody,
-		TextSize = 14,
+		TextScaled = true,
 		TextWrapped = true,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = "",
 		Parent = detail,
 	})
+	Create("UITextSizeConstraint", { MaxTextSize = 14, Parent = descriptionLabel })
 	for index, spec in STATS do
 		local y = 118 + (index - 1) * 26
 		text({
@@ -466,7 +476,7 @@ function ShopController.Open()
 		return
 	end
 	isOpen = true
-	State.UIOpen = true
+	State.SetMenuOpen("Armory", true)
 	messageLabel.Text = ""
 	gui.Enabled = true
 	refresh()
@@ -477,7 +487,7 @@ function ShopController.Close()
 		return
 	end
 	isOpen = false
-	State.UIOpen = false
+	State.SetMenuOpen("Armory", false)
 	gui.Enabled = false
 end
 

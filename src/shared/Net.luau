@@ -12,6 +12,7 @@ local EVENTS = {
 	"WeaponEquip",
 	"WeaponFire",
 	"WeaponReload",
+	"WeaponGuard",
 	-- server -> client
 	"HitConfirm",
 	"AmmoUpdate",
@@ -21,17 +22,21 @@ local EVENTS = {
 	"DamageTaken",
 	"OpenShop",
 	"Died",
+	"BulletLine",
 }
 
 -- Cosmetic, high-frequency traffic that may be dropped.
 local UNRELIABLE_EVENTS = {
 	"ShotReplicated",
+	"AimLine",
 }
 
 local FUNCTIONS = {
 	"GetProfile",
 	"ShopPurchase",
 	"ShopEquip",
+	"AllocateAttribute",
+	"ResetAttributes",
 }
 
 local folder: Instance

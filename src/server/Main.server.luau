@@ -13,12 +13,14 @@ local services: { [number]: Service } = {
 	require(Services.WorldService) :: any,
 	require(Services.DataService) :: any,
 	require(Services.ProgressionService) :: any,
+	require(Services.AttributeService) :: any,
 	require(Services.BountyService) :: any,
 	require(Services.CombatService) :: any,
 	require(Services.WeaponService) :: any,
 	require(Services.EnemyService) :: any,
 	require(Services.ShopService) :: any,
 	require(Services.LeaderboardService) :: any,
+	require(Services.UntouchableService) :: any,
 	require(Services.PlayerService) :: any,
 }
 

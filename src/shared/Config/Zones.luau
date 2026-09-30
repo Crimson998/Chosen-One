@@ -36,7 +36,7 @@ local list: { ZoneDef } = {
 	{
 		Id = "Haven",
 		DisplayName = "Haven",
-		Description = "The last safe city. Resupply, gear up and deploy.",
+		Description = "The last city under the orange sky. Resupply, gear up and deploy.",
 		Center = Vector3.new(0, 0, 0),
 		Width = 220,
 		Depth = 220,
@@ -56,8 +56,8 @@ local list: { ZoneDef } = {
 	},
 	{
 		Id = "Outskirts",
-		DisplayName = "The Outskirts",
-		Description = "Overgrown farmland picked over by scavengers.",
+		DisplayName = "The Dust Flats",
+		Description = "Barren scrubland where scavengers pick through the wrecks.",
 		Center = Vector3.new(0, 0, -360),
 		Width = 500,
 		Depth = 500,
@@ -65,9 +65,9 @@ local list: { ZoneDef } = {
 		PvP = false,
 		RecommendedLevel = 1,
 		Theme = {
-			Ground = Color3.fromRGB(88, 130, 64),
-			GroundMaterial = Enum.Material.Grass,
-			Prop = Color3.fromRGB(140, 110, 80),
+			Ground = Color3.fromRGB(150, 126, 94),
+			GroundMaterial = Enum.Material.Ground,
+			Prop = Color3.fromRGB(128, 100, 74),
 			PropMaterial = Enum.Material.WoodPlanks,
 			Accent = Color3.fromRGB(255, 200, 60),
 		},
@@ -105,8 +105,8 @@ local list: { ZoneDef } = {
 	},
 	{
 		Id = "Core",
-		DisplayName = "The Core",
-		Description = "The fortified heart of the old city. Home of the Juggernaut.",
+		DisplayName = "The Ruined Core",
+		Description = "The shattered heart of the old city. Home of the Juggernaut.",
 		Center = Vector3.new(0, 0, -1360),
 		Width = 500,
 		Depth = 500,

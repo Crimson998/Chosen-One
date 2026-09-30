@@ -26,6 +26,19 @@ WorldService.ArmoryRequested = Signal.new() -- (player: Player)
 WorldService.ResupplyRequested = Signal.new() -- (player: Player)
 WorldService.TravelRequested = Signal.new() -- (player: Player, zoneId: string)
 WorldService.ReturnRequested = Signal.new() -- (player: Player)
+WorldService.UntouchableRequested = Signal.new() -- (player: Player)
+
+-- The dodge-the-gunslinger lane in Haven. Runs along +X.
+export type UntouchableLane = {
+	Start: CFrame, -- where a run begins, facing the gunslinger
+	Exit: CFrame, -- where players are returned afterwards
+	Gunslinger: CFrame, -- ground position, facing down the lane
+	StartX: number,
+	GoalX: number, -- crossing this X wins
+	Z: number, -- lane centre line
+	HalfWidth: number,
+	Sign: TextLabel,
+}
 
 local V = Vector3.new
 local CELL = 42
@@ -38,6 +51,7 @@ local spawnPoints: { [string]: { Vector3 } } = {}
 local bossSpots: { [string]: Vector3 } = {}
 local dummySpots: { CFrame } = {}
 local leaderboardRows: Frame? = nil
+local untouchableLane: UntouchableLane? = nil
 
 ---------------------------------------------------------------------------
 -- Part helpers
@@ -424,28 +438,36 @@ local function sandbags(parent: Instance, origin: CFrame)
 	end
 end
 
+-- Leafless dead trees: a trunk with a few bare branches.
 local function trees(parent: Instance, origin: CFrame, rng: Random)
+	local bark = Color3.fromRGB(92, 80, 70)
 	for _ = 1, rng:NextInteger(2, 4) do
-		local height = rng:NextNumber(10, 17)
+		local height = rng:NextNumber(9, 16)
 		local x, z = rng:NextNumber(-12, 12), rng:NextNumber(-12, 12)
+		local lean = CFrame.Angles(rng:NextNumber(-0.12, 0.12), 0, rng:NextNumber(-0.12, 0.12))
+		local base = origin * CFrame.new(x, 0, z) * lean
 		makePart({
 			Name = "Trunk",
-			Size = V(height, 1.6, 1.6),
-			CFrame = origin * CFrame.new(x, height / 2, z) * CFrame.Angles(0, 0, math.rad(90)),
-			Color = Color3.fromRGB(95, 70, 45),
+			Size = V(height, 1.3, 1.3),
+			CFrame = base * CFrame.new(0, height / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
+			Color = bark,
 			Material = Enum.Material.Wood,
 			Shape = Enum.PartType.Cylinder,
 		}, parent)
-		for _ = 1, rng:NextInteger(2, 3) do
-			local size = rng:NextNumber(7, 11)
+		for _ = 1, rng:NextInteger(2, 4) do
+			local length = rng:NextNumber(3, 6)
+			local branchBase = base * CFrame.new(0, height * rng:NextNumber(0.55, 0.95), 0)
+			local branch = branchBase
+				* CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+				* CFrame.Angles(0, 0, math.rad(rng:NextNumber(30, 60)))
+				* CFrame.new(length / 2, 0, 0)
 			makePart({
-				Name = "Leaves",
-				Size = V(size, size, size),
-				CFrame = origin
-					* CFrame.new(x + rng:NextNumber(-2, 2), height + rng:NextNumber(-1, 2), z + rng:NextNumber(-2, 2)),
-				Color = Color3.fromRGB(60, 110, 50):Lerp(Color3.fromRGB(90, 140, 60), rng:NextNumber()),
-				Material = Enum.Material.Grass,
-				Shape = Enum.PartType.Ball,
+				Name = "Branch",
+				Size = V(length, 0.5, 0.5),
+				CFrame = branch,
+				Color = bark,
+				Material = Enum.Material.Wood,
+				Shape = Enum.PartType.Cylinder,
 			}, parent)
 		end
 	end
@@ -836,6 +858,111 @@ local function buildHaven(parent: Instance, zone: ZoneDef)
 		table.insert(dummySpots, CFrame.lookAt(position, position + V(1, 0, 0)))
 	end
 
+	-- UNTOUCHABLE: reach the gunslinger without being hit (north-east).
+	do
+		local laneZ, startX, goalX, halfWidth = -78, 41, 95, 6.5
+		local dust = Color3.fromRGB(150, 120, 90)
+		rest(parent, CFrame.new(71, 0, laneZ), V(68, 0.3, halfWidth * 2 + 1), 0, 0, dust, Enum.Material.Ground)
+		for _, side in { -1, 1 } do
+			local z = laneZ + side * (halfWidth + 0.8)
+			rest(parent, CFrame.new(71, 0, z), V(68, 2.5, 0.6), 0, 0, steel, Enum.Material.Metal)
+			rest(
+				parent,
+				CFrame.new(71, 0, z),
+				V(68, 0.25, 0.7),
+				0,
+				0,
+				Color3.fromRGB(255, 70, 70),
+				Enum.Material.Neon,
+				2.5
+			)
+		end
+		rest(parent, CFrame.new(37.5, 0, laneZ), V(0.6, 2.5, halfWidth * 2 + 2.2), 0, 0, steel, Enum.Material.Metal)
+		rest(
+			parent,
+			CFrame.new(startX, 0, laneZ),
+			V(4, 0.4, halfWidth * 2),
+			0,
+			0,
+			Color3.fromRGB(255, 220, 60),
+			Enum.Material.Neon,
+			0.3
+		)
+		rest(
+			parent,
+			CFrame.new(goalX + 1, 0, laneZ),
+			V(1, 0.4, halfWidth * 2),
+			0,
+			0,
+			Color3.fromRGB(80, 255, 140),
+			Enum.Material.Neon,
+			0.3
+		)
+		rest(parent, CFrame.new(99, 0, laneZ), V(1, 1.2, halfWidth * 2), 0, 0, steel, Enum.Material.DiamondPlate, 0.3)
+
+		local kiosk = rest(
+			parent,
+			CFrame.new(36, 0, laneZ - halfWidth - 5),
+			V(3, 4.5, 3),
+			0,
+			0,
+			Color3.fromRGB(30, 30, 34),
+			Enum.Material.Metal
+		)
+		rest(
+			parent,
+			CFrame.new(36, 0, laneZ - halfWidth - 5),
+			V(3.1, 0.5, 3.1),
+			0,
+			0,
+			Color3.fromRGB(255, 70, 70),
+			Enum.Material.Neon,
+			3.4
+		)
+		addPrompt(kiosk, "Play (¢300)", "UNTOUCHABLE", 0.5, function(player)
+			WorldService.UntouchableRequested:Fire(player)
+		end)
+
+		for _, dz in { -8, 8 } do
+			rest(parent, CFrame.new(105, 0, laneZ + dz), V(0.8, 16, 0.8), 0, 0, steel, Enum.Material.Metal)
+		end
+		local signPart = rest(
+			parent,
+			CFrame.new(105, 0, laneZ),
+			V(0.6, 6, 16),
+			0,
+			0,
+			Color3.fromRGB(20, 22, 26),
+			Enum.Material.SmoothPlastic,
+			9
+		)
+		local sign = addSign(signPart, Enum.NormalId.Left, "UNTOUCHABLE", Color3.fromRGB(255, 90, 90))
+		local kioskSign = rest(
+			parent,
+			CFrame.new(36, 0, laneZ - halfWidth - 5),
+			V(3, 1.6, 0.3),
+			0,
+			1.6,
+			Color3.fromRGB(20, 22, 26),
+			Enum.Material.SmoothPlastic,
+			4.6
+		)
+		addSign(kioskSign, Enum.NormalId.Back, "UNTOUCHABLE", Color3.fromRGB(255, 90, 90))
+
+		local startPosition = V(startX, 3.5, laneZ)
+		local gunslingerPosition = V(102, 0.3, laneZ)
+		untouchableLane = {
+			Start = CFrame.lookAt(startPosition, startPosition + V(1, 0, 0)),
+			Exit = CFrame.lookAt(V(33, 3.5, laneZ - halfWidth - 9), V(40, 3.5, laneZ)),
+			Gunslinger = CFrame.lookAt(gunslingerPosition, gunslingerPosition - V(1, 0, 0)),
+			StartX = startX,
+			GoalX = goalX,
+			Z = laneZ,
+			HalfWidth = halfWidth,
+			Sign = sign,
+		}
+	end
+
 	-- Global leaderboard (south), facing the plaza.
 	for _, x in { -17, 17 } do
 		rest(parent, CFrame.new(x, 0, 96), V(1.5, 26, 1.5), 0, 0, steel, Enum.Material.Metal)
@@ -925,8 +1052,11 @@ local function buildBoundaries(parent: Instance)
 end
 
 local function setupLighting()
-	Lighting.Ambient = Color3.fromRGB(70, 72, 80)
-	Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 136)
+	-- Late-afternoon sun through a dusty orange sky.
+	Lighting.ClockTime = 17.3
+	Lighting.Brightness = 2.4
+	Lighting.Ambient = Color3.fromRGB(80, 66, 58)
+	Lighting.OutdoorAmbient = Color3.fromRGB(150, 122, 100)
 	Lighting.EnvironmentDiffuseScale = 1
 	Lighting.EnvironmentSpecularScale = 1
 	Lighting.GlobalShadows = true
@@ -943,11 +1073,11 @@ local function setupLighting()
 	end
 
 	local atmosphere = ensure("Atmosphere", "Atmosphere") :: Atmosphere
-	atmosphere.Density = 0.32
-	atmosphere.Haze = 1.4
-	atmosphere.Color = Color3.fromRGB(200, 190, 175)
-	atmosphere.Decay = Color3.fromRGB(110, 100, 90)
-	atmosphere.Glare = 0.2
+	atmosphere.Density = 0.36
+	atmosphere.Haze = 2.2
+	atmosphere.Color = Color3.fromRGB(255, 196, 140)
+	atmosphere.Decay = Color3.fromRGB(190, 110, 70)
+	atmosphere.Glare = 0.4
 
 	local bloom = ensure("BloomEffect", "Bloom") :: BloomEffect
 	bloom.Intensity = 0.6
@@ -955,12 +1085,12 @@ local function setupLighting()
 	bloom.Threshold = 1.6
 
 	local grading = ensure("ColorCorrectionEffect", "Grading") :: ColorCorrectionEffect
-	grading.Contrast = 0.08
-	grading.Saturation = -0.05
-	grading.TintColor = Color3.fromRGB(255, 248, 240)
+	grading.Contrast = 0.1
+	grading.Saturation = -0.12
+	grading.TintColor = Color3.fromRGB(255, 236, 218)
 
 	local rays = ensure("SunRaysEffect", "SunRays") :: SunRaysEffect
-	rays.Intensity = 0.05
+	rays.Intensity = 0.08
 	rays.Spread = 0.8
 end
 
@@ -986,6 +1116,10 @@ end
 
 function WorldService.GetLeaderboardRows(): Frame?
 	return leaderboardRows
+end
+
+function WorldService.GetUntouchableLane(): UntouchableLane?
+	return untouchableLane
 end
 
 function WorldService.Init()
