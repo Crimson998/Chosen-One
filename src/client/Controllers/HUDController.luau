@@ -24,6 +24,7 @@ local Progression = require(ReplicatedStorage.Shared.Config.Progression)
 local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Version = require(ReplicatedStorage.Shared.Version)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local Zones = require(ReplicatedStorage.Shared.Config.Zones)
 
@@ -664,6 +665,18 @@ local function buildOverlays()
 		TextColor3 = Theme.Muted,
 		TextStrokeTransparency = 0.5,
 		Text = HELP_TEXT,
+		Parent = gui,
+	})
+
+	text({
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -8, 1, -8),
+		Size = UDim2.fromOffset(160, 14),
+		TextSize = 11,
+		TextColor3 = Theme.Muted,
+		TextTransparency = 0.4,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Text = `Chosen One v{Version}`,
 		Parent = gui,
 	})
 end

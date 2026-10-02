@@ -2,6 +2,10 @@
 -- Server entry point. Services are initialised in dependency order, then
 -- started once everything is wired up.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Version = require(ReplicatedStorage.Shared.Version)
+
 local Services = script.Parent.Services
 
 type Service = {
@@ -38,4 +42,4 @@ for _, service in services do
 	end
 end
 
-print("[Chosen One] Server ready")
+print(`[Chosen One] Server ready (v{Version})`)

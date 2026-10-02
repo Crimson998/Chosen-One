@@ -12,6 +12,7 @@ ReplicatedStorage:WaitForChild("Shared")
 local Net = require(ReplicatedStorage.Shared.Net)
 local State = require(script.Parent.State)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Version = require(ReplicatedStorage.Shared.Version)
 
 local Controllers = script.Parent.Controllers
 
@@ -73,3 +74,5 @@ end)
 for _, controller in controllers do
 	task.spawn(controller.Start)
 end
+
+print(`[Chosen One] Client ready (v{Version})`)
