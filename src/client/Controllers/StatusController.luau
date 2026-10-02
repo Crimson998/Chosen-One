@@ -7,12 +7,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
 local Create = require(script.Parent.Parent.UI.Create)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Net = require(ReplicatedStorage.Shared.Net)
 local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Parent.UI.Theme)
-local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 
 type Result = {
 	Success: boolean,
@@ -95,7 +95,7 @@ local function refresh()
 		row.PlusFive.Visible = canSpend and profile.AttributePoints >= 5
 	end
 
-	local carried = Weapons.LoadoutWeight(profile.Loadout.Primary, profile.Loadout.Secondary)
+	local carried = Inventory.Weight(profile)
 	local capacity = Attributes.CarryCapacity(attributes.STR)
 	local lines = {
 		`Max HP  {Attributes.MaxHealth(attributes.VIT)}`,

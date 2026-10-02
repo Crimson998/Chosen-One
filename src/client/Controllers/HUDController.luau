@@ -11,6 +11,8 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
+local Items = require(ReplicatedStorage.Shared.Config.Items)
 local Audio = require(ReplicatedStorage.Shared.Audio)
 local Bounties = require(ReplicatedStorage.Shared.Config.Bounties)
 local Create = require(script.Parent.Parent.UI.Create)
@@ -39,7 +41,7 @@ local KILLFEED_MAX = 6
 local KILLFEED_LIFETIME = 7
 local BOSS_BAR_RANGE = 260
 local HELP_TEXT =
-	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim / Guard  •  R Reload  •  1/2/Q/Wheel Switch  •  E Interact  •  B Armory  •  C Stats  •  Tab Scoreboard  •  H Help"
+	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim/Guard  •  R Reload  •  1/2/Q Switch  •  F Med Kit  •  G Grenade  •  E Interact/Loot  •  I Inventory  •  B Armory  •  C Stats  •  Tab Scores  •  H Help"
 local CIRCLE_COLOR = Color3.fromRGB(80, 255, 140)
 
 local gui: ScreenGui
@@ -59,6 +61,7 @@ local xpFill: Frame
 local xpText: TextLabel
 local creditsLabel: TextLabel
 local weaponLabel: TextLabel
+local suppliesLabel: TextLabel
 local magLabel: TextLabel
 local reserveLabel: TextLabel
 local modeLabel: TextLabel
@@ -293,6 +296,15 @@ local function buildWeaponPanel()
 	weaponLabel = text({
 		Size = UDim2.fromOffset(320, 22),
 		TextSize = 18,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Text = "",
+		Parent = panel,
+	})
+	suppliesLabel = text({
+		Position = UDim2.fromOffset(0, -20),
+		Size = UDim2.fromOffset(320, 18),
+		TextSize = 14,
+		TextColor3 = Theme.Muted,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Text = "",
 		Parent = panel,
@@ -675,6 +687,9 @@ local function refreshProfile()
 		xpText.Text = `{Format.Commas(profile.XP)} / {Format.Commas(needed)} XP`
 	end
 	creditsLabel.Text = `¢ {Format.Commas(profile.Credits)}`
+	local medkits = Inventory.Count(profile, "MedKit") + Inventory.Count(profile, "MedKitPlus")
+	local grenades = Inventory.Count(profile, "PlasmaGrenade")
+	suppliesLabel.Text = `[F] MED KIT x{medkits}     [G] PLASMA x{grenades}`
 	pointsLabel.Visible = profile.AttributePoints > 0
 	pointsLabel.Text =
 		`▲ {profile.AttributePoints} stat point{if profile.AttributePoints == 1 then "" else "s"} to spend (press C)`
@@ -729,7 +744,10 @@ local function refreshAmmo()
 	end
 	local equippedSlot = if ammo.Equipped == "Secondary" then ammo.Secondary else ammo.Primary
 	local def = Weapons.Get(equippedSlot.Id)
-	weaponLabel.Text = if def then string.upper(def.DisplayName) else ""
+	local rarity = Items.RarityInfo(equippedSlot.Rarity)
+	local rarityPrefix = if equippedSlot.Rarity ~= "Common" then `{string.upper(equippedSlot.Rarity)} ` else ""
+	weaponLabel.Text = if def then rarityPrefix .. string.upper(def.DisplayName) else ""
+	weaponLabel.TextColor3 = if equippedSlot.Rarity ~= "Common" then rarity.Color else Theme.Text
 	local melee = def ~= nil and def.Melee == true
 	magLabel.Text = if melee then "∞" else tostring(equippedSlot.Mag)
 	reserveLabel.Text = if melee then "" else `/ {equippedSlot.Reserve}`
@@ -755,8 +773,7 @@ local function refreshAmmo()
 			else ""
 		local profile = State.Profile
 		local overweight = profile ~= nil
-			and Weapons.LoadoutWeight(profile.Loadout.Primary, profile.Loadout.Secondary)
-				> Attributes.CarryCapacity(profile.Attributes.STR)
+			and Inventory.Weight(profile) > Attributes.CarryCapacity(profile.Attributes.STR)
 		modeLabel.Text = `{if overweight then "OVERWEIGHT  •  " else ""}{def.Class}  •  {mode}{ammoType}{hint}`
 		modeLabel.TextColor3 = if overweight then Theme.Warn else Theme.Muted
 	end
@@ -982,6 +999,11 @@ local function onNotify(notification: Notification)
 	if kind == "XP" then
 		local suffix = if notification.Text ~= "" then `  {notification.Text}` else ""
 		addReward(`+{Format.Commas(amount)} XP{suffix}`, Theme.XP)
+	elseif kind == "Loot" then
+		local rarity = notification.Rarity or "Common"
+		local prefix = if rarity ~= "Common" then `{rarity} ` else ""
+		local count = if amount > 1 then ` x{amount}` else ""
+		addReward(`+ {prefix}{notification.Text}{count}`, Items.RarityInfo(rarity).Color)
 	elseif kind == "Credits" then
 		addReward(`+¢{Format.Commas(amount)}`, Theme.Credits)
 	elseif kind == "LevelUp" then

@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
 local State = require(script.Parent.Parent.State)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 
@@ -71,7 +72,7 @@ local function update()
 
 	local profile = State.Profile
 	local attributes = if profile then profile.Attributes else Attributes.Default()
-	local carried = if profile then Weapons.LoadoutWeight(profile.Loadout.Primary, profile.Loadout.Secondary) else 0
+	local carried = if profile then Inventory.Weight(profile) else 0
 	local overweight = carried > Attributes.CarryCapacity(attributes.STR)
 
 	State.Sprinting = sprintHeld

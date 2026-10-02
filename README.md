@@ -4,8 +4,8 @@ A first-person shooter MMO for Roblox in the spirit of *Gun Gale Online*.
 Players spawn in **Haven**, a safe hub city under an orange sky, then fight
 NPCs and each other across a chain of harder wasteland zones. They dodge
 bullet lines, time shots to their heartbeat and build a character from
-STR/AGI/VIT/DEX/LUK. Levels, stats, credits, weapons and bounties persist
-between sessions.
+STR/AGI/VIT/DEX/LUK, and loot everything that drops. Levels, stats, credits,
+inventory, gear and bounties persist between sessions.
 
 Everything is built from code. The map, guns, first-person viewmodels, enemies
 and UI are generated at runtime from primitive parts, so the game runs from an
@@ -34,9 +34,9 @@ empty Baseplate with no uploaded assets.
   Carrying more than your STR allows slows you down and stops you sprinting.
   Stats can be reset in Haven for credits.
 - **Optical vs solid guns.** Optical (laser) guns are light, accurate and
-  have no falloff, and they hit monsters harder. But every player wears an
-  **anti-bullet field** that absorbs 75% of optical damage, so solid rounds
-  rule PvP.
+  have no falloff, and they hit monsters harder. But players carry an
+  **anti-bullet field** generator that absorbs most optical damage (60% for
+  the starter Mk1, more for better ones), so solid rounds rule PvP.
 - **Photon Blade.** A beam sword for your sidearm slot. Hold aim to guard: it
   deflects bullets coming from the front.
 - **GGO-style arsenal.** Includes the pink *Vixen* PDW with a 50-round top
@@ -47,6 +47,49 @@ empty Baseplate with no uploaded assets.
   close in. Reach him untouched to win the jackpot, which grows with every
   failed attempt.
 
+## Loot, inventory and gear
+
+- **Item drops.** Every enemy has a loot table (`Config/Loot.luau`): salvage
+  to sell, med kits, plasma grenades, and a small chance at a weapon, armor
+  or field generator. Drops land on the ground with a light beam in the
+  item's rarity colour (taller and brighter for rarer items). Walk up and
+  press **E** to pick one up.
+- **Personal loot.** Everyone who earned kill credit gets their own roll. A
+  drop is reserved for its owner for 30 seconds, then anyone can take it.
+  Unclaimed loot disappears after 2 minutes.
+- **Rarity.** Weapons, armor and gadgets roll a rarity when they drop:
+  | Rarity | Drop weight | Bonus |
+  |---|---|---|
+  | Common | 55 | – |
+  | Uncommon | 28 | +4% damage / stronger gear |
+  | Rare | 12 | +8% |
+  | Epic | 4 | +12% |
+  | Legendary | 1 | +18% |
+  Tougher enemies and LUK push the odds toward the higher tiers. Rarer items
+  also sell for more (up to x8).
+- **Inventory (I).** 40 slots. Everything you carry counts toward your STR
+  carry limit, not just the guns you have equipped, so a full bag of salvage
+  slows you down. From the inventory you can equip weapons and gear, use
+  consumables, drop items, or sell them (in Haven only). Stackable items
+  stack (scrap up to 99, med kits up to 10).
+- **Gear slots.** Primary, Secondary, Armor and Gadget.
+  - **Armor** (Kevlar Vest, Plate Carrier, Exo Rig) blocks part of all solid
+    damage. Explosions get half the benefit.
+  - **Gadgets** are anti-bullet field generators (Mk1 to Mk3) that absorb
+    optical damage. With no gadget equipped, lasers hit you at full strength.
+- **Consumables.** **F** uses a med kit (heals over 4 seconds). **G** throws a
+  plasma grenade, which explodes after a short fuse, damages everything in
+  its radius and is blocked by walls.
+- **PvP death penalty.** As in GGO, a player killed by another player drops a
+  random unequipped item (half the stack for stackables) where they fell.
+  Equipped gear is safe.
+- **Armory catalogue.** The shop (B in Haven) sells weapons, gear and
+  supplies. Sell your loot from the inventory while you're in Haven. Some items, like the *Nemesis .50*, the
+  Exo Rig and the Mk3 field, are drop-only. The Juggernaut always drops its
+  core, which is worth a fortune, plus two rolls from a pool of top weapons.
+- **Old saves** are migrated: the weapons a version 1 profile owned become
+  inventory items, and its loadout is kept.
+
 Places and weapons use original names, so the game can be published without
 borrowing the franchise's trademarks. Rename anything in `src/shared/Config`.
 
@@ -56,7 +99,7 @@ borrowing the franchise's trademarks. Rename anything in `src/shared/Config`.
   and the server decides. It validates shot origin, fire rate (a token bucket
   that tolerates network jitter), ammo, reload timing, range, line of sight
   and each claimed hit position, with extra leeway for fast-moving targets.
-- **16 weapons, 2 loadout slots.** Pistols, a revolver, an optical blaster, a
+- **16 weapons, 4 gear slots.** Pistols, a revolver, an optical blaster, a
   photon blade, SMG, PDW, assault and optical rifles, a burst rifle, shotgun,
   DMR, LMG, minigun, sniper and anti-materiel rifle. Weapons have damage
   falloff, headshot multipliers, bloom, recoil, weight, STR requirements,
@@ -85,8 +128,8 @@ borrowing the franchise's trademarks. Rename anything in `src/shared/Config`.
   in-memory store in Studio when API access is off.
 - **Interface.** HUD with health, XP, credits, ammo, weapon slots, kill feed,
   zone banners, bounty tracker, damage-direction indicators, low-health
-  vignette, boss health bar and death screen. Also an Armory shop window and a
-  Tab scoreboard.
+  vignette, boss health bar, loot pickup feed and death screen. Also an
+  inventory, an Armory catalogue, a STATUS window and a Tab scoreboard.
 
 ## Getting started
 
@@ -139,20 +182,26 @@ to API Services**.
 | Right mouse | Aim down sights (with the Photon Blade: guard) |
 | R | Reload |
 | 1 / 2, Q, mouse wheel | Switch weapon |
-| E | Interact (Armory, resupply, transit, return beacon) |
+| E | Interact (pick up loot, Armory, resupply, transit, return beacon) |
+| I | Inventory: equip, use, sell, drop |
+| F | Use a med kit |
+| G | Throw a plasma grenade |
 | B | Armory (inside Haven) |
 | C | STATUS: spend stat points |
 | Tab | Scoreboard |
 | H | Toggle controls help |
 
-A gamepad works too: R2 fire, L2 aim, X reload, Y swap, L3 sprint.
+A gamepad works too: R2 fire, L2 aim, X reload, Y swap, L3 sprint, D-pad up
+med kit, D-pad right grenade.
 
 ## Project layout
 
 ```
 default.project.json          Rojo project (maps src/ into the DataModel)
 src/shared/   → ReplicatedStorage.Shared
-  Config/                     All tuning: Weapons, Enemies, Zones, Attributes, Progression, Bounties, Sounds
+  Config/                     All tuning: Weapons, Items, Loot, Enemies, Zones, Attributes,
+                              Progression, Bounties, Sounds
+  Inventory.luau              Inventory helpers shared by client and server (weight, gear stats)
   Net.luau                    Every RemoteEvent/RemoteFunction, declared in one place
   Types.luau                  Profile and network payload types
   Ballistics.luau             Damage falloff and spread (shared by client and server)
@@ -169,18 +218,21 @@ src/server/   → ServerScriptService.Server
     CombatService             All damage: zone rules, anti-bullet fields, blade deflection,
                               kill credit, rewards, regeneration
     WeaponService             Server-side ammo, fire-rate and hit validation, crits, melee,
-                              player bullet-line relay, ammo drops
+                              player bullet-line relay, ammo drops, equipping from inventory
+    InventoryService          Adding and removing items, equip, unequip, sell, drop
+    LootService               Enemy loot rolls, ground drops, pickup, PvP death drops
+    ConsumableService         Med kits and plasma grenades
     EnemyService              NPC spawning and AI with telegraphed (bullet line) attacks
     UntouchableService        The dodge-the-gunslinger jackpot game
-    ShopService               Armory purchases and loadouts
+    ShopService               Armory catalogue purchases
     LeaderboardService        Cross-server leaderboard (OrderedDataStore)
     PlayerService             Spawning, nametags, death and respawn, transit
   Util/                       RateLimiter, EnemyRig (procedural R6 NPCs)
 src/client/   → StarterPlayerScripts.Client
   Main.client.luau            Boots controllers
   State.luau                  Shared client state and signals
-  Controllers/                Weapon, Viewmodel, Effects, HUD, Movement, Shop, Status,
-                              Scoreboard, HeartRate, BulletLine
+  Controllers/                Weapon, Viewmodel, Effects, HUD, Movement, Shop, Inventory,
+                              Status, Scoreboard, HeartRate, BulletLine
 src/character/Health.server.luau  Stubs out default regen (CombatService handles it)
 ```
 
@@ -201,8 +253,16 @@ src/character/Health.server.luau  Stubs out default regen (CombatService handles
 ## Tuning and extending
 
 - **New weapon:** add an entry to `Config/Weapons.luau`. Pick a `Model.Style`
-  or add a style to `WeaponModel.luau`. The shop, HUD and server validation
-  pick it up automatically.
+  or add a style to `WeaponModel.luau`. An inventory item is generated for
+  it, and the shop, HUD and server validation pick it up automatically. Set
+  `DropOnly = true` to keep it out of the Armory, then add it to a loot pool.
+- **New item:** add it to `Config/Items.luau` (material, consumable, armor or
+  gadget). Leave out `BuyPrice` to make it drop-only. Keep `SellValue` below
+  `BuyPrice`, or players can buy and resell it for profit.
+- **Loot:** edit `Config/Loot.luau`. Each enemy has fixed entries (item,
+  chance, count) plus weapon and gear pools with a roll chance and a rarity
+  luck bonus. Ownership time, despawn time and LUK's effect live there too.
+  Rarity weights and bonuses are in `Config/Items.luau`.
 - **New enemy:** add it to `Config/Enemies.luau` and reference it from a
   zone's `Enemies` list in `Config/Zones.luau`.
 - **New zone:** add it to `Config/Zones.luau` north of the others, with a
@@ -229,7 +289,9 @@ definitions.
 - A *Bullet of Bullets*-style battle royale event: a queue in Haven, a
   separate arena, satellite scans that reveal positions, and a champion title
 - Squad Jam-style team battles
-- Parties and squads with shared XP, party chat and markers
+- Parties and squads with shared XP, shared loot, party chat and markers
+- Player trading and a bank or stash in Haven for items you don't carry
+- Crafting and upgrades: turn salvage into ammo, grenades or a higher rarity
 - Mobile touch controls (fire and aim buttons)
 - Cosmetics: weapon skins, charms and titles bought with credits
 - Pathfinding for enemies around large buildings

@@ -18,6 +18,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Ballistics = require(ReplicatedStorage.Shared.Ballistics)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
+local Items = require(ReplicatedStorage.Shared.Config.Items)
 local CombatService = require(script.Parent.CombatService)
 local DataService = require(script.Parent.DataService)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -38,6 +40,8 @@ type BulletLine = Types.BulletLine
 
 type WeaponState = {
 	Def: WeaponDef,
+	Uid: string, -- inventory item
+	Rarity: string,
 	Mag: number,
 	Reserve: number,
 	ReloadToken: number,
@@ -78,6 +82,9 @@ local AIM_LINE_RADIUS = 3.5 -- studs from the aim ray that count as "aimed at"
 local AIM_LINE_DURATION = 0.35
 
 local loadouts: { [Player]: Loadout } = {}
+-- Ammo left in weapons swapped out this life, by inventory Uid, so swapping
+-- guns back and forth can't refill them.
+local ammoMemory: { [Player]: { [string]: AmmoMemory } } = {}
 local lastFired: { [Player]: number } = {}
 local rng = Random.new()
 
@@ -105,12 +112,19 @@ local function fireBudget(def: WeaponDef): (number, number)
 	return (1 / interval) * FIRE_RATE_SLACK, 3
 end
 
-local function newState(def: WeaponDef): WeaponState
+type AmmoMemory = {
+	Mag: number,
+	Reserve: number,
+}
+
+local function newState(def: WeaponDef, uid: string, rarity: string, ammo: AmmoMemory?): WeaponState
 	local _, capacity = fireBudget(def)
 	return {
 		Def = def,
-		Mag = def.MagSize,
-		Reserve = def.ReserveAmmo,
+		Uid = uid,
+		Rarity = rarity,
+		Mag = if ammo then ammo.Mag else def.MagSize,
+		Reserve = if ammo then ammo.Reserve else def.ReserveAmmo,
 		ReloadToken = 0,
 		ReloadingUntil = 0,
 		Tokens = capacity,
@@ -135,8 +149,18 @@ local function sendAmmo(player: Player)
 		return
 	end
 	local payload: AmmoState = {
-		Primary = { Id = loadout.Primary.Def.Id, Mag = loadout.Primary.Mag, Reserve = loadout.Primary.Reserve },
-		Secondary = { Id = loadout.Secondary.Def.Id, Mag = loadout.Secondary.Mag, Reserve = loadout.Secondary.Reserve },
+		Primary = {
+			Id = loadout.Primary.Def.Id,
+			Mag = loadout.Primary.Mag,
+			Reserve = loadout.Primary.Reserve,
+			Rarity = loadout.Primary.Rarity,
+		},
+		Secondary = {
+			Id = loadout.Secondary.Def.Id,
+			Mag = loadout.Secondary.Mag,
+			Reserve = loadout.Secondary.Reserve,
+			Rarity = loadout.Secondary.Rarity,
+		},
 		Equipped = loadout.Equipped,
 	}
 	ammoUpdate:FireClient(player, payload)
@@ -379,6 +403,7 @@ local function onFire(player: Player, payload: any)
 					if headshot then
 						damage *= def.HeadshotMultiplier
 					end
+					damage *= Items.DamageMultiplier(state.Rarity)
 					local entry = pending[targetHumanoid]
 					if entry and melee then
 						-- A swing's rays fan out; count the best one, not all of them.
@@ -550,39 +575,85 @@ local function onAimLine(player: Player, payload: any)
 	end
 end
 
--- Called by PlayerService for every new character. Gives full ammo.
-function WeaponService.SetupCharacter(player: Player, character: Model, keepEquipped: boolean?)
+-- The weapon equipped in a loadout slot, falling back to the default gun.
+local function equippedWeapon(player: Player, slot: Slot): (WeaponDef, string, string)
 	local profile = DataService.GetProfile(player)
-	if not profile then
+	local item = if profile then Inventory.Equipped(profile, slot) else nil
+	local def = if item then Weapons.Get(item.Id) else nil
+	if item and def and def.Slot == slot then
+		return def, item.Uid, item.Rarity
+	end
+	local fallback = if slot == "Primary" then Weapons.DefaultLoadout.Primary else Weapons.DefaultLoadout.Secondary
+	return Weapons.ById[fallback], "", "Common"
+end
+
+-- Called by PlayerService for every new character. Gives full ammo.
+function WeaponService.SetupCharacter(player: Player, character: Model)
+	if not DataService.GetProfile(player) then
 		return
 	end
-	local primary = Weapons.Get(profile.Loadout.Primary) or Weapons.ById[Weapons.DefaultLoadout.Primary]
-	local secondary = Weapons.Get(profile.Loadout.Secondary) or Weapons.ById[Weapons.DefaultLoadout.Secondary]
 	local previous = loadouts[player]
-	local equipped: Slot = if keepEquipped and previous then previous.Equipped else "Primary"
 	if previous and previous.WorldModel then
 		previous.WorldModel:Destroy()
 	end
-
 	character:SetAttribute("Guarding", nil)
+	ammoMemory[player] = {}
 
+	local primary, primaryUid, primaryRarity = equippedWeapon(player, "Primary")
+	local secondary, secondaryUid, secondaryRarity = equippedWeapon(player, "Secondary")
 	local loadout: Loadout = {
 		Character = character,
-		Primary = newState(primary),
-		Secondary = newState(secondary),
-		Equipped = equipped,
+		Primary = newState(primary, primaryUid, primaryRarity),
+		Secondary = newState(secondary, secondaryUid, secondaryRarity),
+		Equipped = "Primary",
 	}
 	loadouts[player] = loadout
 	attachWorldModel(loadout)
 	sendAmmo(player)
 end
 
--- Re-reads the profile loadout (after buying/equipping in the Armory).
-function WeaponService.RefreshLoadout(player: Player)
+-- Swaps the live weapon in a slot after the profile loadout changed. A gun
+-- swapped back in keeps the ammo it had; a fresh gun comes fully loaded in
+-- Haven but with only two magazines out in the field.
+function WeaponService.EquipFromInventory(player: Player, slot: Slot)
+	local loadout = loadouts[player]
 	local character = player.Character
-	if character and loadouts[player] then
-		WeaponService.SetupCharacter(player, character, true)
+	if not loadout or loadout.Character ~= character or not character then
+		return
 	end
+	local def, uid, rarity = equippedWeapon(player, slot)
+	local old = getSlot(loadout, slot)
+	if old.Uid == uid and old.Def == def then
+		old.Rarity = rarity
+		sendAmmo(player)
+		return
+	end
+
+	cancelReload(old)
+	local memory = ammoMemory[player] or {}
+	ammoMemory[player] = memory
+	if old.Uid ~= "" then
+		memory[old.Uid] = { Mag = old.Mag, Reserve = old.Reserve }
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local inHaven = root ~= nil and root:IsA("BasePart") and Zones.IsSafeAt(root.Position)
+	local ammo: AmmoMemory? = memory[uid]
+	if not ammo and not inHaven then
+		ammo = { Mag = def.MagSize, Reserve = if def.Melee then 0 else def.MagSize }
+	end
+	(memory :: any)[uid] = nil
+
+	local state = newState(def, uid, rarity, ammo)
+	if slot == "Primary" then
+		loadout.Primary = state
+	else
+		loadout.Secondary = state
+	end
+	if loadout.Equipped == slot then
+		character:SetAttribute("Guarding", nil)
+		attachWorldModel(loadout)
+	end
+	sendAmmo(player)
 end
 
 function WeaponService.RefillAll(player: Player)
@@ -678,6 +749,7 @@ function WeaponService.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		loadouts[player] = nil
 		lastFired[player] = nil
+		ammoMemory[player] = nil
 	end)
 end
 

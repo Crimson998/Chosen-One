@@ -9,6 +9,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local BountyService = require(script.Parent.BountyService)
 local DataService = require(script.Parent.DataService)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
+local Items = require(ReplicatedStorage.Shared.Config.Items)
 local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
@@ -30,9 +32,9 @@ export type DamageInfo = {
 	DamageType: string?, -- Weapons.AmmoType; nil = solid
 }
 
--- Players wear anti-bullet fields that absorb most optical (laser) damage.
--- Monsters have none, which makes optical guns the hunter's choice.
-local ANTI_BULLET_FIELD = 0.25
+-- Players' defenses come from their gear: armor blocks part of solid (and
+-- half as much explosive) damage; an anti-bullet field generator absorbs
+-- optical damage. Monsters have no fields, so optical guns hit them harder.
 local OPTICAL_VS_MONSTERS = 1.15
 local DEFLECT_ARC = math.cos(math.rad(55)) -- blade guard covers +/-55 degrees
 
@@ -44,7 +46,9 @@ export type AttackRecord = {
 
 local CombatService = {}
 
--- Fired after a kill is processed: (humanoid: Humanoid, attacker: Attacker, info: DamageInfo)
+-- Fired after a kill is processed:
+-- (humanoid: Humanoid, attacker: Attacker, info: DamageInfo, credited: { Player })
+-- `credited` lists the players who earned kill credit on an enemy.
 CombatService.Killed = Signal.new()
 
 local REGEN_TICK = 0.25
@@ -141,10 +145,14 @@ local function weaponName(weaponId: string?): string
 		return weapon.DisplayName
 	end
 	local enemy = Enemies.Get(weaponId)
-	return if enemy then enemy.DisplayName else ""
+	if enemy then
+		return enemy.DisplayName
+	end
+	local item = Items.Get(weaponId)
+	return if item then item.Name else ""
 end
 
-local function rewardEnemyKill(humanoid: Humanoid, def: EnemyDef, killer: Player?, info: DamageInfo)
+local function rewardEnemyKill(humanoid: Humanoid, def: EnemyDef, killer: Player?, info: DamageInfo): { Player }
 	local credited: { Player } = {}
 	local contributed: { [Player]: number } = contributions[humanoid] or {}
 	local threshold = humanoid.MaxHealth * Progression.AssistThreshold
@@ -158,7 +166,7 @@ local function rewardEnemyKill(humanoid: Humanoid, def: EnemyDef, killer: Player
 	end
 
 	if def.Passive then
-		return
+		return {}
 	end
 
 	local zone = Zones.GetZoneAt(rootPosition(humanoid.Parent) or Vector3.zero)
@@ -206,6 +214,7 @@ local function rewardEnemyKill(humanoid: Humanoid, def: EnemyDef, killer: Player
 			Text = `{def.DisplayName} was defeated by {table.concat(names, ", ")}!`,
 		})
 	end
+	return credited
 end
 
 local function rewardPlayerKill(victim: Player, killer: Player, info: DamageInfo)
@@ -232,6 +241,7 @@ local function handleKill(humanoid: Humanoid, attacker: Attacker, info: DamageIn
 	local victimModel = humanoid.Parent
 	local victimPlayer = if victimModel then Players:GetPlayerFromCharacter(victimModel) else nil
 	local killer = asPlayer(attacker)
+	local credited: { Player } = {}
 
 	if victimPlayer then
 		if killer then
@@ -255,12 +265,12 @@ local function handleKill(humanoid: Humanoid, attacker: Attacker, info: DamageIn
 	else
 		local def = CombatService.GetEnemyDef(humanoid)
 		if def then
-			rewardEnemyKill(humanoid, def, killer, info)
+			credited = rewardEnemyKill(humanoid, def, killer, info)
 		end
 	end
 
 	contributions[humanoid] = nil
-	CombatService.Killed:Fire(humanoid, attacker, info)
+	CombatService.Killed:Fire(humanoid, attacker, info, credited)
 end
 
 -- A player guarding with a blade cuts incoming bullets out of the air when
@@ -299,8 +309,15 @@ function CombatService.DamageHumanoid(
 			damageTaken:FireClient(victimPlayer, info.SourcePosition, 0)
 			return 0, false
 		end
-		if info.DamageType == "Optical" then
-			amount *= ANTI_BULLET_FIELD
+		local profile = DataService.GetProfile(victimPlayer)
+		if profile then
+			if info.DamageType == "Optical" then
+				amount *= 1 - Inventory.FieldStrength(profile)
+			elseif info.DamageType == "Explosive" then
+				amount *= 1 - Inventory.ArmorReduction(profile) * 0.5
+			elseif info.DamageType ~= "Blade" then
+				amount *= 1 - Inventory.ArmorReduction(profile)
+			end
 		end
 	elseif info.DamageType == "Optical" then
 		amount *= OPTICAL_VS_MONSTERS

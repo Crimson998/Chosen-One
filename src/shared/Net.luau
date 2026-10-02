@@ -13,6 +13,7 @@ local EVENTS = {
 	"WeaponFire",
 	"WeaponReload",
 	"WeaponGuard",
+	"ThrowGrenade",
 	-- server -> client
 	"HitConfirm",
 	"AmmoUpdate",
@@ -23,6 +24,7 @@ local EVENTS = {
 	"OpenShop",
 	"Died",
 	"BulletLine",
+	"Explosion",
 }
 
 -- Cosmetic, high-frequency traffic that may be dropped.
@@ -34,7 +36,8 @@ local UNRELIABLE_EVENTS = {
 local FUNCTIONS = {
 	"GetProfile",
 	"ShopPurchase",
-	"ShopEquip",
+	"InventoryAction",
+	"UseConsumable",
 	"AllocateAttribute",
 	"ResetAttributes",
 }

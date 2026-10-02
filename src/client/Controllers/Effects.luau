@@ -123,6 +123,29 @@ function Effects.Impact(position: Vector3, normal: Vector3, hitCharacter: boolea
 	end)
 end
 
+-- Plasma grenade detonation: an expanding, fading blue sphere and a flash.
+function Effects.Explosion(position: Vector3, radius: number)
+	local color = Color3.fromRGB(90, 170, 255)
+	local sphere = effectPart(Vector3.new(2, 2, 2), CFrame.new(position), color, Enum.Material.Neon)
+	sphere.Shape = Enum.PartType.Ball
+	sphere.Transparency = 0.15
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = radius * 2.5
+	light.Brightness = 6
+	light.Parent = sphere
+	sphere.Parent = folder
+	local diameter = radius * 2
+	TweenService:Create(sphere, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(diameter, diameter, diameter),
+		Transparency = 1,
+	}):Play()
+	TweenService:Create(light, TweenInfo.new(0.4), { Brightness = 0 }):Play()
+	burst(position, Vector3.yAxis, Color3.fromRGB(150, 210, 255), 30, NumberRange.new(20, 45), 0.5)
+	Audio.PlayAt("Explosion", position, 1)
+	Debris:AddItem(sphere, 0.45)
+end
+
 function Effects.Flash(position: Vector3, color: Color3?)
 	local part = effectPart(
 		Vector3.new(0.5, 0.5, 0.5),

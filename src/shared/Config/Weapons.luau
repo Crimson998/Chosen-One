@@ -66,6 +66,7 @@ export type WeaponDef = {
 	Scoped: boolean?,
 	MoveSpeedMultiplier: number,
 	Melee: boolean?, -- short-range swing: Pellets rays fanned horizontally, no ammo
+	DropOnly: boolean?, -- not sold in the Armory; only found as loot
 	SpinUp: number?, -- seconds the trigger must be held before it fires (miniguns)
 
 	Model: {
@@ -618,7 +619,7 @@ local defs: { WeaponDef } = {
 		Id = "Nemesis",
 		DisplayName = "Nemesis .50",
 		Class = "Anti-Materiel Rifle",
-		Description = "A .50 calibre goddess of vengeance. Seven rounds that end fights from beyond the horizon. Demands STR.",
+		Description = "A .50 calibre goddess of vengeance. Seven rounds that end fights from beyond the horizon. Demands STR. Only the Juggernaut carries one.",
 		Slot = "Primary",
 		Price = 22000,
 		LevelRequired = 36,
@@ -645,6 +646,7 @@ local defs: { WeaponDef } = {
 		RecoilSide = 1.2,
 		AimFOV = 12,
 		AimTime = 0.45,
+		DropOnly = true,
 		Scoped = true,
 		MoveSpeedMultiplier = 0.82,
 		Model = { Style = "AMR", Body = Color3.fromRGB(58, 62, 52), Accent = Color3.fromRGB(26, 26, 28) },

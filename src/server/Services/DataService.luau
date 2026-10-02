@@ -17,12 +17,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
+local Inventory = require(ReplicatedStorage.Shared.Inventory)
+local Items = require(ReplicatedStorage.Shared.Config.Items)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
 local Signal = require(ReplicatedStorage.Shared.Signal)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 
 type Profile = Types.Profile
+type ItemInstance = Types.ItemInstance
 
 local STORE_NAME = "ChosenOne_Profiles_v1"
 local AUTOSAVE_INTERVAL = 60
@@ -87,22 +90,37 @@ local function deepCopy<T>(value: T): T
 	return copy :: any
 end
 
+-- Builds an inventory, handing out sequential Uids ("i1", "i2", ...).
+local function inventoryBuilder(startId: number)
+	local builder = { Items = {} :: { ItemInstance }, NextId = startId }
+	function builder.Add(id: string, count: number): string
+		local uid = `i{builder.NextId}`
+		builder.NextId += 1
+		table.insert(builder.Items, { Uid = uid, Id = id, Count = count, Rarity = "Common" })
+		return uid
+	end
+	return builder
+end
+
 function DataService.NewProfile(): Profile
-	local owned: { [string]: boolean } = {
-		[Weapons.DefaultLoadout.Primary] = true,
-		[Weapons.DefaultLoadout.Secondary] = true,
-	}
+	local builder = inventoryBuilder(1)
+	local primary = builder.Add(Weapons.DefaultLoadout.Primary, 1)
+	local secondary = builder.Add(Weapons.DefaultLoadout.Secondary, 1)
+	local field = builder.Add("FieldMk1", 1)
+	builder.Add("MedKit", 3)
 	return {
-		Version = 1,
+		Version = 2,
 		Level = 1,
 		XP = 0,
 		Credits = Progression.StartingCredits,
 		Attributes = Attributes.Default(),
 		AttributePoints = 0,
-		OwnedWeapons = owned,
+		Inventory = builder.Items,
+		NextItemId = builder.NextId,
 		Loadout = {
-			Primary = Weapons.DefaultLoadout.Primary,
-			Secondary = Weapons.DefaultLoadout.Secondary,
+			Primary = primary,
+			Secondary = secondary,
+			Gadget = field,
 		},
 		Stats = {
 			Kills = 0,
@@ -120,6 +138,98 @@ function DataService.NewProfile(): Profile
 	}
 end
 
+-- Version 1 profiles owned weapons by id. Give them one Common copy of each
+-- owned weapon, keep the same loadout, and add the new starter gear.
+local function migrateFromOwnedWeapons(raw: { [string]: any })
+	local owned = if typeof(raw.OwnedWeapons) == "table" then raw.OwnedWeapons else {}
+	local oldLoadout = if typeof(raw.Loadout) == "table" then raw.Loadout else {}
+	local ids: { string } = {}
+	for id, isOwned in owned do
+		if isOwned == true and Weapons.Get(id) then
+			table.insert(ids, id)
+		end
+	end
+	table.sort(ids)
+
+	local builder = inventoryBuilder(1)
+	local uidByWeapon: { [string]: string } = {}
+	for _, id in ids do
+		uidByWeapon[id] = builder.Add(id, 1)
+	end
+	local loadout = {
+		Primary = uidByWeapon[oldLoadout.Primary],
+		Secondary = uidByWeapon[oldLoadout.Secondary],
+		Gadget = builder.Add("FieldMk1", 1),
+	}
+	builder.Add("MedKit", 3)
+
+	raw.Inventory = builder.Items
+	raw.NextItemId = builder.NextId
+	raw.Loadout = loadout
+	raw.OwnedWeapons = nil
+	raw.Version = 2
+end
+
+-- Drops unknown items and duplicate Uids, clamps stacks and rarities.
+local function sanitizeInventory(profile: Profile)
+	local clean: { ItemInstance } = {}
+	local seen: { [string]: boolean } = {}
+	local highest = 0
+	for _, item in profile.Inventory do
+		local def = if typeof(item) == "table" then Items.Get(item.Id) else nil
+		if not def or typeof(item.Uid) ~= "string" or seen[item.Uid] then
+			continue
+		end
+		seen[item.Uid] = true
+		local count = tonumber(item.Count) or 1
+		item.Count = math.clamp(math.floor(count), 1, def.MaxStack)
+		item.Rarity = if def.MaxStack == 1 and Items.IsRarity(item.Rarity) then item.Rarity else "Common"
+		table.insert(clean, item)
+		local number = tonumber(string.match(item.Uid, "^i(%d+)$"))
+		if number then
+			highest = math.max(highest, number)
+		end
+	end
+	profile.Inventory = clean
+	profile.NextItemId = math.max(math.floor(tonumber(profile.NextItemId) or 1), highest + 1)
+end
+
+-- Every profile must have a weapon equipped in both slots; armor and gadget
+-- slots must point at an item of the right kind (or be empty).
+local function repairLoadout(profile: Profile)
+	local loadout = profile.Loadout :: any
+	local defaults: { [string]: string } =
+		{ Primary = Weapons.DefaultLoadout.Primary, Secondary = Weapons.DefaultLoadout.Secondary }
+	for slot, defaultId in defaults do
+		local item = Inventory.Find(profile, loadout[slot])
+		local weapon = if item then Weapons.Get(item.Id) else nil
+		if weapon and weapon.Slot == slot then
+			continue
+		end
+		loadout[slot] = nil
+		for _, candidate in profile.Inventory do
+			local candidateWeapon = Weapons.Get(candidate.Id)
+			if candidateWeapon and candidateWeapon.Slot == slot then
+				loadout[slot] = candidate.Uid
+				break
+			end
+		end
+		if not loadout[slot] then
+			local uid = `i{profile.NextItemId}`
+			profile.NextItemId += 1
+			table.insert(profile.Inventory, { Uid = uid, Id = defaultId, Count = 1, Rarity = "Common" })
+			loadout[slot] = uid
+		end
+	end
+	for _, slot in { "Armor", "Gadget" } do
+		local item = Inventory.Find(profile, loadout[slot])
+		local def = if item then Items.Get(item.Id) else nil
+		if not def or def.Category ~= slot then
+			loadout[slot] = nil
+		end
+	end
+end
+
 -- Fills keys that are missing from an older saved profile and repairs
 -- anything that no longer matches the current config.
 local function reconcile(saved: any): Profile
@@ -127,12 +237,28 @@ local function reconcile(saved: any): Profile
 	if typeof(saved) ~= "table" then
 		return template
 	end
+	if saved.Inventory == nil then
+		migrateFromOwnedWeapons(saved)
+	elseif typeof(saved.Inventory) ~= "table" then
+		saved.Inventory = {}
+	end
+	if typeof(saved.Loadout) ~= "table" then
+		saved.Loadout = {}
+	end
 
+	-- Inventory and Loadout are validated below rather than merged with the
+	-- template, which would splice starter items into existing inventories.
 	local function fill(target: { [any]: any }, defaults: { [any]: any })
 		for key, value in defaults do
 			if target[key] == nil then
 				target[key] = deepCopy(value)
-			elseif typeof(value) == "table" and typeof(target[key]) == "table" and next(value) ~= nil then
+			elseif
+				typeof(value) == "table"
+				and typeof(target[key]) == "table"
+				and next(value) ~= nil
+				and key ~= "Inventory"
+				and key ~= "Loadout"
+			then
 				fill(target[key], value)
 			end
 		end
@@ -141,24 +267,8 @@ local function reconcile(saved: any): Profile
 
 	local profile = saved :: Profile
 	profile.Level = math.clamp(math.floor(profile.Level), 1, Progression.MaxLevel)
-	profile.OwnedWeapons[Weapons.DefaultLoadout.Primary] = true
-	profile.OwnedWeapons[Weapons.DefaultLoadout.Secondary] = true
-	for id in profile.OwnedWeapons do
-		if not Weapons.Get(id) then
-			profile.OwnedWeapons[id] = nil
-		end
-	end
-
-	local function validSlot(id: string, slot: string): boolean
-		local def = Weapons.Get(id)
-		return def ~= nil and def.Slot == slot and profile.OwnedWeapons[id] == true
-	end
-	if not validSlot(profile.Loadout.Primary, "Primary") then
-		profile.Loadout.Primary = Weapons.DefaultLoadout.Primary
-	end
-	if not validSlot(profile.Loadout.Secondary, "Secondary") then
-		profile.Loadout.Secondary = Weapons.DefaultLoadout.Secondary
-	end
+	sanitizeInventory(profile)
+	repairLoadout(profile)
 
 	-- Stat points: clamp each stat, then make spent + unspent add up to what
 	-- this level has earned (covers older profiles and tuning changes).

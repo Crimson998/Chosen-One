@@ -31,6 +31,8 @@ local Sounds: { [string]: string } = {
 	BulletLine = "", -- warning when a bullet line locks onto you
 	Heartbeat = "",
 	SpinUp = "",
+	Explosion = "",
+	Pickup = "",
 }
 
 return Sounds
