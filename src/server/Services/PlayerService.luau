@@ -159,6 +159,9 @@ end
 
 local function onProfileLoaded(player: Player, _profile: Profile)
 	player.CameraMode = Enum.CameraMode.LockFirstPerson
+	-- Shift lock means nothing in first person, and its key binding would
+	-- swallow Shift (sprint) for players who turned it on in their settings.
+	player.DevEnableMouseLock = false
 	player.CharacterAdded:Connect(function(character)
 		onCharacterAdded(player, character)
 	end)

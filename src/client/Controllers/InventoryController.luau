@@ -3,6 +3,7 @@
 -- item details and Equip / Use / Sell / Drop actions. Also owns the
 -- consumable hotkeys (F med kit, G plasma grenade) and grenade explosions.
 
+local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -654,20 +655,33 @@ function InventoryController.Init()
 		end
 	end)
 
+	-- Roblox's default camera script binds I (zoom in) through
+	-- ContextActionService and sinks it, so UserInputService reports the key
+	-- as processed. Bind above the camera's priority instead. Actions don't
+	-- fire while the player is typing in a text box.
+	ContextActionService:BindActionAtPriority(
+		"ToggleInventory",
+		function(_action: string, state: Enum.UserInputState, _input: InputObject): Enum.ContextActionResult
+			if state == Enum.UserInputState.Begin then
+				if isOpen then
+					InventoryController.Close()
+				else
+					InventoryController.Open()
+				end
+			end
+			return Enum.ContextActionResult.Sink
+		end,
+		false,
+		Enum.ContextActionPriority.High.Value,
+		Enum.KeyCode.I
+	)
+
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed then
+		if processed or State.UIOpen then
 			return
 		end
 		local key = input.KeyCode
-		if key == Enum.KeyCode.I then
-			if isOpen then
-				InventoryController.Close()
-			else
-				InventoryController.Open()
-			end
-		elseif State.UIOpen then
-			return
-		elseif key == Enum.KeyCode.F or key == Enum.KeyCode.DPadUp then
+		if key == Enum.KeyCode.F or key == Enum.KeyCode.DPadUp then
 			useMedKit()
 		elseif key == Enum.KeyCode.G or key == Enum.KeyCode.DPadRight then
 			throwGrenade()
