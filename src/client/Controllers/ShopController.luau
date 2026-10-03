@@ -1,7 +1,7 @@
 --!strict
 -- The Armory window: a catalogue of weapons, gear (armor and anti-bullet
 -- field generators) and supplies. Purchases land in your inventory; equip
--- them there (I). Opens from the Armory counter prompt or B inside Haven.
+-- them there (Tab). Opens from the Armory counter prompt or B inside Haven.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

@@ -42,7 +42,7 @@ local KILLFEED_MAX = 6
 local KILLFEED_LIFETIME = 7
 local BOSS_BAR_RANGE = 260
 local HELP_TEXT =
-	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim/Guard  •  R Reload  •  1/2/Q Switch  •  F Med Kit  •  G Grenade  •  E Interact/Loot  •  I Inventory  •  B Armory  •  C Stats  •  Tab Scores  •  H Help"
+	"WASD Move  •  Shift Sprint  •  LMB Fire  •  RMB Aim/Guard  •  R Reload  •  1/2/Q Switch  •  F Med Kit  •  G Grenade  •  E Interact/Loot  •  Tab Inventory  •  B Armory  •  C Stats  •  M Settings  •  P Scores  •  H Help"
 local CIRCLE_COLOR = Color3.fromRGB(80, 255, 140)
 
 local gui: ScreenGui

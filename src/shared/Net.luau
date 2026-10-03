@@ -14,6 +14,7 @@ local EVENTS = {
 	"WeaponReload",
 	"WeaponGuard",
 	"ThrowGrenade",
+	"SaveSettings",
 	-- server -> client
 	"HitConfirm",
 	"AmmoUpdate",

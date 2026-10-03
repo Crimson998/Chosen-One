@@ -3,6 +3,7 @@
 
 local Attributes = require(script.Parent.Config.Attributes)
 local Items = require(script.Parent.Config.Items)
+local Settings = require(script.Parent.Config.Settings)
 
 export type Stats = {
 	Kills: number, -- PvP kills
@@ -51,6 +52,7 @@ export type Profile = {
 	Loadout: Loadout,
 	Stats: Stats,
 	Bounties: { BountyProgress },
+	Settings: Settings.Settings,
 }
 
 export type AmmoSlot = {

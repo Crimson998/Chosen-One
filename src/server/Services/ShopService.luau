@@ -59,7 +59,7 @@ local function purchase(player: Player, itemId: any, count: any): ActionResult
 	end
 	InventoryService.AddItem(player, def.Id, amount, "Common")
 	local suffix = if amount > 1 then ` x{amount}` else ""
-	return { Success = true, Message = `Bought {def.Name}{suffix}. Equip it from your inventory (I).` }
+	return { Success = true, Message = `Bought {def.Name}{suffix}. Equip it from your inventory (Tab).` }
 end
 
 function ShopService.Init()

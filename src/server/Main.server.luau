@@ -18,6 +18,7 @@ local services: { [number]: Service } = {
 	require(Services.DataService) :: any,
 	require(Services.ProgressionService) :: any,
 	require(Services.AttributeService) :: any,
+	require(Services.SettingsService) :: any,
 	require(Services.BountyService) :: any,
 	require(Services.CombatService) :: any,
 	require(Services.WeaponService) :: any,

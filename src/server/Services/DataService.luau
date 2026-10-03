@@ -20,6 +20,7 @@ local Attributes = require(ReplicatedStorage.Shared.Config.Attributes)
 local Inventory = require(ReplicatedStorage.Shared.Inventory)
 local Items = require(ReplicatedStorage.Shared.Config.Items)
 local Progression = require(ReplicatedStorage.Shared.Config.Progression)
+local Settings = require(ReplicatedStorage.Shared.Config.Settings)
 local Signal = require(ReplicatedStorage.Shared.Signal)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
@@ -135,6 +136,7 @@ function DataService.NewProfile(): Profile
 			BountiesCompleted = 0,
 		},
 		Bounties = {},
+		Settings = Settings.Default(),
 	}
 end
 
@@ -269,6 +271,7 @@ local function reconcile(saved: any): Profile
 	profile.Level = math.clamp(math.floor(profile.Level), 1, Progression.MaxLevel)
 	sanitizeInventory(profile)
 	repairLoadout(profile)
+	profile.Settings = Settings.Sanitize(profile.Settings)
 
 	-- Stat points: clamp each stat, then make spent + unspent add up to what
 	-- this level has earned (covers older profiles and tuning changes).

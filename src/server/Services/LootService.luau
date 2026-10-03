@@ -135,7 +135,7 @@ local function pickUp(player: Player, drop: Drop)
 	end
 	local added = InventoryService.AddItem(player, drop.Id, drop.Count, drop.Rarity)
 	if added <= 0 then
-		ProgressionService.Notify(player, { Kind = "Warning", Text = "Inventory full. Sell or drop something (I)." })
+		ProgressionService.Notify(player, { Kind = "Warning", Text = "Inventory full. Sell or drop something (Tab)." })
 		return
 	end
 	ProgressionService.Notify(player, { Kind = "Loot", Text = def.Name, Amount = added, Rarity = drop.Rarity })

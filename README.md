@@ -67,7 +67,7 @@ empty Baseplate with no uploaded assets.
   | Legendary | 1 | +18% |
   Tougher enemies and LUK push the odds toward the higher tiers. Rarer items
   also sell for more (up to x8).
-- **Inventory (I).** 40 slots. Everything you carry counts toward your STR
+- **Inventory (Tab).** 40 slots. Everything you carry counts toward your STR
   carry limit, not just the guns you have equipped, so a full bag of salvage
   slows you down. From the inventory you can equip weapons and gear, use
   consumables, drop items, or sell them (in Haven only). Stackable items
@@ -104,6 +104,8 @@ borrowing the franchise's trademarks. Rename anything in `src/shared/Config`.
   DMR, LMG, minigun, sniper and anti-materiel rifle. Weapons have damage
   falloff, headshot multipliers, bloom, recoil, weight, STR requirements,
   aim-down-sights with zoom and matched sensitivity, and scope overlays.
+- **Settings (M).** Mouse sensitivity and a separate aim-down-sights
+  sensitivity, saved to your profile. Also reachable from the inventory.
 - **First-person feel.** Procedural viewmodels with arms, sway, bob, kick,
   sprint pose, reload and equip animations, muzzle flash, tracers, impacts,
   bullet holes, hitmarkers and floating damage numbers.
@@ -183,12 +185,13 @@ to API Services**.
 | R | Reload |
 | 1 / 2, Q, mouse wheel | Switch weapon |
 | E | Interact (pick up loot, Armory, resupply, transit, return beacon) |
-| I | Inventory: equip, use, sell, drop |
+| Tab | Inventory: equip, use, sell, drop |
 | F | Use a med kit |
 | G | Throw a plasma grenade |
 | B | Armory (inside Haven) |
 | C | STATUS: spend stat points |
-| Tab | Scoreboard |
+| M | Settings: mouse and aim sensitivity |
+| P (hold) | Scoreboard |
 | H | Toggle controls help |
 
 A gamepad works too: R2 fire, L2 aim, X reload, Y swap, L3 sprint, D-pad up
@@ -200,12 +203,13 @@ med kit, D-pad right grenade.
 default.project.json          Rojo project (maps src/ into the DataModel)
 src/shared/   → ReplicatedStorage.Shared
   Config/                     All tuning: Weapons, Items, Loot, Enemies, Zones, Attributes,
-                              Progression, Bounties, Sounds
+                              Progression, Bounties, Settings, Sounds
   Inventory.luau              Inventory helpers shared by client and server (weight, gear stats)
   Net.luau                    Every RemoteEvent/RemoteFunction, declared in one place
   Types.luau                  Profile and network payload types
   Ballistics.luau             Damage falloff and spread (shared by client and server)
   WeaponModel.luau            Procedural gun builder (viewmodels and world models)
+  Version.luau                Build number shown on the HUD and printed at startup
   Signal, Spring, Audio, Format
 src/server/   → ServerScriptService.Server
   Main.server.luau            Boots services in dependency order (Init, then Start)
@@ -214,6 +218,7 @@ src/server/   → ServerScriptService.Server
     DataService               Session-locked DataStore profiles
     ProgressionService        XP, levels, credits, stats, leaderstats, profile replication
     AttributeService          Spending and resetting STR/AGI/VIT/DEX/LUK points
+    SettingsService           Saves each player's settings (sensitivity) to their profile
     BountyService             Rotating objectives
     CombatService             All damage: zone rules, anti-bullet fields, blade deflection,
                               kill credit, rewards, regeneration
@@ -232,7 +237,7 @@ src/client/   → StarterPlayerScripts.Client
   Main.client.luau            Boots controllers
   State.luau                  Shared client state and signals
   Controllers/                Weapon, Viewmodel, Effects, HUD, Movement, Shop, Inventory,
-                              Status, Scoreboard, HeartRate, BulletLine
+                              Status, Settings, Scoreboard, HeartRate, BulletLine
 src/character/Health.server.luau  Stubs out default regen (CombatService handles it)
 ```
 

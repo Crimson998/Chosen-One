@@ -1,5 +1,5 @@
 --!strict
--- Hold Tab for the server scoreboard (replaces the core player list).
+-- Hold P for the server scoreboard (replaces the core player list).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -147,14 +147,14 @@ function ScoreboardController.Init()
 	})
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if not processed and input.KeyCode == Enum.KeyCode.Tab then
+		if not processed and input.KeyCode == Enum.KeyCode.P then
 			visible = true
 			gui.Enabled = true
 			refresh()
 		end
 	end)
 	UserInputService.InputEnded:Connect(function(input: InputObject)
-		if input.KeyCode == Enum.KeyCode.Tab then
+		if input.KeyCode == Enum.KeyCode.P then
 			visible = false
 			gui.Enabled = false
 		end

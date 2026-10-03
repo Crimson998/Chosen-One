@@ -4,6 +4,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Settings = require(ReplicatedStorage.Shared.Config.Settings)
 local Signal = require(ReplicatedStorage.Shared.Signal)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Zones = require(ReplicatedStorage.Shared.Config.Zones)
@@ -19,6 +20,10 @@ local State = {
 
 	Zone = nil :: Zones.ZoneDef?,
 	ZoneChanged = Signal.new(),
+
+	-- Taken from the profile when it first loads; the SETTINGS window owns
+	-- it after that (the server only stores it).
+	Settings = nil :: Settings.Settings?,
 
 	UIOpen = false, -- a menu owns the mouse; weapons are holstered
 	Firing = false,

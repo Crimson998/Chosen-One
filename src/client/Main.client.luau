@@ -27,6 +27,7 @@ local controllers: { Controller } = {
 	require(Controllers.MovementController) :: any,
 	require(Controllers.ShopController) :: any,
 	require(Controllers.StatusController) :: any,
+	require(Controllers.SettingsController) :: any,
 	require(Controllers.InventoryController) :: any,
 	require(Controllers.ScoreboardController) :: any,
 	require(Controllers.HeartRateController) :: any,

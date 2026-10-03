@@ -408,7 +408,7 @@ local function onRender(dt: number)
 		State.AimAlpha = 0
 		aimAlpha = 0
 		camera.FieldOfView = BASE_FOV
-		UserInputService.MouseDeltaSensitivity = 1
+		UserInputService.MouseDeltaSensitivity = if State.Settings then State.Settings.Sensitivity else 1
 		return
 	end
 	local def = vm.Def
@@ -455,11 +455,15 @@ local function onRender(dt: number)
 		} :: Types.AimLine)
 	end
 
-	-- Field of view and matching mouse sensitivity.
+	-- Field of view and matching mouse sensitivity, scaled by the player's
+	-- sensitivity settings.
 	local eased = smoothstep(aimAlpha)
 	local baseFov = BASE_FOV + (SPRINT_FOV - BASE_FOV) * sprintAlpha
 	camera.FieldOfView = baseFov + (def.AimFOV - baseFov) * eased
-	UserInputService.MouseDeltaSensitivity = math.min(1, camera.FieldOfView / BASE_FOV)
+	local settings = State.Settings
+	local look = if settings then settings.Sensitivity else 1
+	local aim = if settings then settings.AimSensitivity else 1
+	UserInputService.MouseDeltaSensitivity = look * math.min(1, camera.FieldOfView / BASE_FOV) * (1 + (aim - 1) * eased)
 
 	local scoped = def.Scoped == true and aimAlpha > 0.92
 	if scoped ~= State.Scoped then

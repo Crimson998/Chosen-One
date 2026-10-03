@@ -1,9 +1,8 @@
 --!strict
--- The INVENTORY window (I): equipped gear, an item grid with rarity borders,
+-- The INVENTORY window (Tab): equipped gear, an item grid with rarity borders,
 -- item details and Equip / Use / Sell / Drop actions. Also owns the
 -- consumable hotkeys (F med kit, G plasma grenade) and grenade explosions.
 
-local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -16,6 +15,7 @@ local HUDController = require(script.Parent.HUDController)
 local Inventory = require(ReplicatedStorage.Shared.Inventory)
 local Items = require(ReplicatedStorage.Shared.Config.Items)
 local Net = require(ReplicatedStorage.Shared.Net)
+local SettingsController = require(script.Parent.SettingsController)
 local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -403,8 +403,8 @@ local function build()
 	})
 	header = text({
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -64, 0, 18),
-		Size = UDim2.fromOffset(560, 22),
+		Position = UDim2.new(1, -166, 0, 18),
+		Size = UDim2.fromOffset(470, 22),
 		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextColor3 = Theme.Muted,
@@ -423,6 +423,17 @@ local function build()
 	})
 	close.Activated:Connect(function()
 		InventoryController.Close()
+	end)
+	local settingsButton = button({
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -58, 0, 12),
+		Size = UDim2.fromOffset(96, 32),
+		Text = "SETTINGS",
+		TextSize = 13,
+		Parent = window,
+	})
+	settingsButton.Activated:Connect(function()
+		SettingsController.Open()
 	end)
 
 	-- Equipped gear.
@@ -655,33 +666,20 @@ function InventoryController.Init()
 		end
 	end)
 
-	-- Roblox's default camera script binds I (zoom in) through
-	-- ContextActionService and sinks it, so UserInputService reports the key
-	-- as processed. Bind above the camera's priority instead. Actions don't
-	-- fire while the player is typing in a text box.
-	ContextActionService:BindActionAtPriority(
-		"ToggleInventory",
-		function(_action: string, state: Enum.UserInputState, _input: InputObject): Enum.ContextActionResult
-			if state == Enum.UserInputState.Begin then
-				if isOpen then
-					InventoryController.Close()
-				else
-					InventoryController.Open()
-				end
-			end
-			return Enum.ContextActionResult.Sink
-		end,
-		false,
-		Enum.ContextActionPriority.High.Value,
-		Enum.KeyCode.I
-	)
-
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed or State.UIOpen then
+		if processed then
 			return
 		end
 		local key = input.KeyCode
-		if key == Enum.KeyCode.F or key == Enum.KeyCode.DPadUp then
+		if key == Enum.KeyCode.Tab then
+			if isOpen then
+				InventoryController.Close()
+			else
+				InventoryController.Open()
+			end
+		elseif State.UIOpen then
+			return
+		elseif key == Enum.KeyCode.F or key == Enum.KeyCode.DPadUp then
 			useMedKit()
 		elseif key == Enum.KeyCode.G or key == Enum.KeyCode.DPadRight then
 			throwGrenade()
